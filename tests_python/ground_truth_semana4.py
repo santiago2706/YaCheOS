@@ -4,11 +4,14 @@ import json
 from collections import deque
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+BASE_CASE = Path(__file__).resolve().parent / "fixtures/procesos_semana4.json"
 ALGORITHMS = ("FCFS", "SJF", "RR", "PRIORITY", "PRIORITY_PREEMPTIVE", "PRIORITY_AGING")
 
 
 def schedule(processes, algorithm, quantum=4, aging_interval=4):
+    """Simula ticks enteros; aging baja la prioridad efectiva tras cada intervalo
+    acumulado en READY (mínimo 1). Los empates se resuelven por llegada y PID.
+    """
     if (algorithm not in ALGORITHMS or type(quantum) is not int or type(aging_interval) is not int
             or not 1 <= quantum <= 1000000 or not 1 <= aging_interval <= 1000000):
         raise ValueError("Algoritmo o parámetros inválidos")
@@ -120,7 +123,7 @@ def schedule(processes, algorithm, quantum=4, aging_interval=4):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--file", type=Path, default=ROOT / "data/procesos_semana4.json")
+    parser.add_argument("--file", type=Path, default=BASE_CASE)
     parser.add_argument("--algo", choices=ALGORITHMS)
     parser.add_argument("--quantum", type=int, default=4)
     parser.add_argument("--aging-interval", type=int, default=4)
