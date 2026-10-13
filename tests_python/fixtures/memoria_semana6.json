@@ -1,0 +1,10 @@
+{
+  "page_size_bytes": 4096,
+  "page_table": {"0": 5, "1": 2, "2": 7, "3": 0},
+  "virtual_address": 10000,
+  "segments": [
+    {"id": 0, "name": "Código", "base": 1000, "limit": 400},
+    {"id": 1, "name": "Datos", "base": 5200, "limit": 800},
+    {"id": 2, "name": "Pila", "base": 9000, "limit": 300}
+  ]
+}
