@@ -1,0 +1,17 @@
+from page_replacement import simulate
+import pytest
+
+
+def test_belady_and_optimal():
+    refs = [1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5]
+    assert simulate(refs, 3, "FIFO")["faults"] == 9
+    assert simulate(refs, 4, "FIFO")["faults"] == 10
+    for count in (3, 4):
+        optimal = simulate(refs, count, "OPTIMAL")["faults"]
+        assert optimal <= simulate(refs, count, "FIFO")["faults"]
+        assert optimal <= simulate(refs, count, "LRU")["faults"]
+
+
+def test_invalid_frame_count():
+    with pytest.raises(ValueError):
+        simulate([1, 2], True, "FIFO")
