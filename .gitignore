@@ -7,6 +7,12 @@
 *.dll
 *.so
 *.dylib
+/server
+*.o
+
+# Simulation runtime artifacts
+cpu_timeline.json
+
 
 # Test binary, built with `go test -c`
 *.test

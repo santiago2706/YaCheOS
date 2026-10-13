@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YaKcheOS - Simulador Web de Sistema Operativo | UNI FIIS</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/desktop.css">
+  <link rel="stylesheet" href="css/terminal.css">
+</head>
+<body>
+
+  <!-- Escritorio Principal -->
+  <div id="desktop">
+    <!-- Marca de agua sutil -->
+    <div class="desktop-watermark">
+      <h1>YaKcheOS</h1>
+      <p>UNI FIIS · SW407 Sistemas Operativos (2026-II)</p>
+    </div>
+
+    <!-- Iconos del Escritorio -->
+    <div class="desktop-icons-container">
+      <div class="desktop-icon" id="icon-terminal" data-window-target="win-terminal" tabindex="0">
+        <div class="icon-symbol terminal-icon">📟</div>
+        <span class="icon-label">Terminal</span>
+      </div>
+      <div class="desktop-icon" id="icon-tasks" data-window-target="win-tasks" tabindex="0">
+        <div class="icon-symbol processes-icon">📊</div>
+        <span class="icon-label">Task Manager</span>
+      </div>
+      <div class="desktop-icon" id="icon-sync" data-window-target="win-sync" tabindex="0">
+        <div class="icon-symbol sync-icon">🔄</div>
+        <span class="icon-label">Sincronización</span>
+      </div>
+      <div class="desktop-icon" id="icon-about" data-window-target="win-about" tabindex="0">
+        <div class="icon-symbol about-icon">ℹ️</div>
+        <span class="icon-label">Acerca de</span>
+      </div>
+    </div>
+
+    <!-- ======================================================================
+         VENTANA 1: TERMINAL CLI (T1.3)
+         ====================================================================== -->
+    <div class="os-window active-window" id="win-terminal" style="top: 50px; left: 60px; width: 680px; height: 440px;">
+      <div class="window-titlebar">
+        <div class="window-controls">
+          <button class="win-btn win-btn-close" title="Cerrar" aria-label="Cerrar ventana"></button>
+          <button class="win-btn win-btn-minimize" title="Minimizar" aria-label="Minimizar ventana"></button>
+          <button class="win-btn win-btn-maximize" title="Maximizar" aria-label="Maximizar ventana"></button>
+        </div>
+        <div class="window-title">
+          <span>📟 Terminal - yakcheos:~$</span>
+        </div>
+        <div class="window-actions-right">
+          <span>bash v5.2</span>
+        </div>
+      </div>
+
+      <div class="window-content terminal-content-box">
+        <div class="terminal-container" id="terminal-root">
+          <div class="terminal-screen" id="terminal-screen">
+            <div class="term-banner">
+              <pre class="term-banner-ascii">
+ __     __    _  ___     _             ___  ____  
+ \ \   / /_ _| |/ / |__ (_)_   _ _   _/ _ \/ ___| 
+  \ \ / / _` | ' /| '_ \| | | | | | | | | | \___ \ 
+   \ V / (_| | . \| | | | | |_| | |_| | |_| |___) |
+    \_/ \__,_|_|\_\_| |_|_|\__,_|\__, |\___/|____/ 
+                                 |___/              </pre>
+              <div>YaKcheOS Terminal Simulator [Version 0.1.0-alpha]</div>
+              <div>(c) 2026 UNI FIIS - Escuela de Ingenieria de Software.</div>
+              <div>Escribe <span class="term-cyan">help</span> para consultar los comandos disponibles del laboratorio.</div>
+            </div>
+
+            <div class="terminal-history" id="terminal-history"></div>
+
+            <div class="terminal-input-row">
+              <div class="terminal-prompt">
+                <span class="prompt-user">yakcheos</span><span class="prompt-at">@</span><span class="prompt-host">uni</span><span class="prompt-colon">:</span><span class="prompt-path">~</span><span class="prompt-symbol">$</span>
+              </div>
+              <div class="terminal-input-wrapper">
+                <input type="text" id="terminal-input" class="terminal-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="window-resize-handle"></div>
+    </div>
+
+    <!-- ======================================================================
+         VENTANA 2: TASK MANAGER / PROCESOS (T1.2)
+         ====================================================================== -->
+    <div class="os-window" id="win-tasks" style="top: 90px; left: 420px; width: 660px; height: 420px;">
+      <div class="window-titlebar">
+        <div class="window-controls">
+          <button class="win-btn win-btn-close" title="Cerrar" aria-label="Cerrar ventana"></button>
+          <button class="win-btn win-btn-minimize" title="Minimizar" aria-label="Minimizar ventana"></button>
+          <button class="win-btn win-btn-maximize" title="Maximizar" aria-label="Maximizar ventana"></button>
+        </div>
+        <div class="window-title">
+          <span>📊 Task Manager - Monitor de Recursos</span>
+        </div>
+        <div class="window-actions-right">
+          <span>M1: CPU & Procesos</span>
+        </div>
+      </div>
+
+      <div class="window-content">
+        <div class="app-view-container">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+              <h3 style="font-size: 1rem; font-weight: 700; color: #f8fafc;">Procesos en Memoria (Semana 4)</h3>
+              <p style="font-size: 0.78rem; color: #94a3b8;">Contrato activo: <code style="color: #38bdf8;">data/procesos_semana4.json</code></p>
+            </div>
+            <button id="btn-reload-tasks" class="start-button" style="padding: 4px 10px; font-size: 0.75rem;">Actualizar Datos</button>
+          </div>
+
+          <table class="pm-table" id="table-processes">
+            <thead>
+              <tr>
+                <th>PID</th>
+                <th>Nombre</th>
+                <th>Llegada (t)</th>
+                <th>Ráfaga (Burst)</th>
+                <th>Prioridad</th>
+                <th>Memoria</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-processes">
+              <tr>
+                <td>1</td>
+                <td><strong style="color: #38bdf8;">P1</strong></td>
+                <td>0 min</td>
+                <td>5 min</td>
+                <td>3</td>
+                <td>128 KB</td>
+                <td><span class="pm-badge" style="background: rgba(16,185,129,0.2); color: #34d399;">READY</span></td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td><strong style="color: #38bdf8;">P2</strong></td>
+                <td>1 min</td>
+                <td>3 min</td>
+                <td>4</td>
+                <td>64 KB</td>
+                <td><span class="pm-badge" style="background: rgba(16,185,129,0.2); color: #34d399;">READY</span></td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td><strong style="color: #38bdf8;">P3</strong></td>
+                <td>2 min</td>
+                <td>8 min</td>
+                <td>1</td>
+                <td>256 KB</td>
+                <td><span class="pm-badge" style="background: rgba(16,185,129,0.2); color: #34d399;">READY</span></td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td><strong style="color: #38bdf8;">P4</strong></td>
+                <td>3 min</td>
+                <td>6 min</td>
+                <td>2</td>
+                <td>128 KB</td>
+                <td><span class="pm-badge" style="background: rgba(16,185,129,0.2); color: #34d399;">READY</span></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="gantt-preview-container">
+            <div style="display: flex; justify-content: space-between; font-size: 0.78rem;">
+              <span style="font-weight: 600; color: #cbd5e1;">Esquema de Planificación FCFS (Caso Base de Clase)</span>
+              <span style="color: #38bdf8; font-family: var(--font-mono);">W_prom: 5.75 min | Duración total: 22 min</span>
+            </div>
+            <div class="gantt-bar">
+              <div class="gantt-segment" style="flex: 5; background: #3b82f6;" title="P1: [0-5]">P1 (5m)</div>
+              <div class="gantt-segment" style="flex: 3; background: #10b981;" title="P2: [5-8]">P2 (3m)</div>
+              <div class="gantt-segment" style="flex: 8; background: #f59e0b;" title="P3: [8-16]">P3 (8m)</div>
+              <div class="gantt-segment" style="flex: 6; background: #8b5cf6;" title="P4: [16-22]">P4 (6m)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="window-resize-handle"></div>
+    </div>
+
+    <!-- ======================================================================
+         VENTANA 3: SINCRONIZACIÓN (T1.2)
+         ====================================================================== -->
+    <div class="os-window" id="win-sync" style="top: 130px; left: 160px; width: 620px; height: 380px;">
+      <div class="window-titlebar">
+        <div class="window-controls">
+          <button class="win-btn win-btn-close" title="Cerrar" aria-label="Cerrar ventana"></button>
+          <button class="win-btn win-btn-minimize" title="Minimizar" aria-label="Minimizar ventana"></button>
+          <button class="win-btn win-btn-maximize" title="Maximizar" aria-label="Maximizar ventana"></button>
+        </div>
+        <div class="window-title">
+          <span>🔄 Sincronización - Módulo de Concurrencia</span>
+        </div>
+        <div class="window-actions-right">
+          <span>M2: Semana 5</span>
+        </div>
+      </div>
+
+      <div class="window-content">
+        <div class="app-view-container">
+          <h4 style="font-size: 0.95rem; margin-bottom: 6px; color: #f8fafc;">Buffer Productor - Consumidor (Capacidad = 5)</h4>
+          <p style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 12px;">
+            Semáforos activos: <code style="color: #34d399;">mutex = 1</code> | <code style="color: #60a5fa;">vacios = 5</code> | <code style="color: #f59e0b;">llenos = 0</code>
+          </p>
+
+          <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 18px;">
+            <div style="background: rgba(30,41,59,0.8); border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; padding: 14px; text-align: center;">
+              <span style="font-size: 0.75rem; color: #64748b;">Slot 0</span>
+              <div style="font-size: 0.8rem; font-weight: 700; color: #94a3b8; margin-top: 4px;">VACÍO</div>
+            </div>
+            <div style="background: rgba(30,41,59,0.8); border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; padding: 14px; text-align: center;">
+              <span style="font-size: 0.75rem; color: #64748b;">Slot 1</span>
+              <div style="font-size: 0.8rem; font-weight: 700; color: #94a3b8; margin-top: 4px;">VACÍO</div>
+            </div>
+            <div style="background: rgba(30,41,59,0.8); border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; padding: 14px; text-align: center;">
+              <span style="font-size: 0.75rem; color: #64748b;">Slot 2</span>
+              <div style="font-size: 0.8rem; font-weight: 700; color: #94a3b8; margin-top: 4px;">VACÍO</div>
+            </div>
+            <div style="background: rgba(30,41,59,0.8); border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; padding: 14px; text-align: center;">
+              <span style="font-size: 0.75rem; color: #64748b;">Slot 3</span>
+              <div style="font-size: 0.8rem; font-weight: 700; color: #94a3b8; margin-top: 4px;">VACÍO</div>
+            </div>
+            <div style="background: rgba(30,41,59,0.8); border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; padding: 14px; text-align: center;">
+              <span style="font-size: 0.75rem; color: #64748b;">Slot 4</span>
+              <div style="font-size: 0.8rem; font-weight: 700; color: #94a3b8; margin-top: 4px;">VACÍO</div>
+            </div>
+          </div>
+
+          <h4 style="font-size: 0.95rem; margin-bottom: 6px; color: #f8fafc;">Filósofos Comensales (5 Procesos Circulares)</h4>
+          <p style="font-size: 0.78rem; color: #94a3b8;">
+            Modalidades del modelo: <span class="pm-badge" style="background: rgba(59,130,246,0.2); color: #93c5fd;">Asimétrica (Preventiva)</span> y <span class="pm-badge" style="background: rgba(239,68,68,0.2); color: #fca5a5;">Deadlock Demostrativo</span>.
+          </p>
+        </div>
+      </div>
+      <div class="window-resize-handle"></div>
+    </div>
+
+    <!-- ======================================================================
+         VENTANA 4: ACERCA DE YAKCHEOS
+         ====================================================================== -->
+    <div class="os-window" id="win-about" style="top: 160px; left: 300px; width: 560px; height: 380px; display: none;">
+      <div class="window-titlebar">
+        <div class="window-controls">
+          <button class="win-btn win-btn-close" title="Cerrar" aria-label="Cerrar ventana"></button>
+          <button class="win-btn win-btn-minimize" title="Minimizar" aria-label="Minimizar ventana"></button>
+          <button class="win-btn win-btn-maximize" title="Maximizar" aria-label="Maximizar ventana"></button>
+        </div>
+        <div class="window-title">
+          <span>ℹ️ Acerca de YaKcheOS</span>
+        </div>
+        <div class="window-actions-right">
+          <span>v0.1.0-alpha</span>
+        </div>
+      </div>
+
+      <div class="window-content">
+        <div class="app-view-container">
+          <h3 style="color: #38bdf8; font-size: 1.1rem; margin-bottom: 4px;">YaKcheOS Web Simulator</h3>
+          <p style="font-size: 0.82rem; color: #cbd5e1; margin-bottom: 14px;">
+            Simulador educativo de Sistemas Operativos desarrollado para la Universidad Nacional de Ingeniería (UNI FIIS).
+          </p>
+
+          <div class="about-grid">
+            <div class="about-card">
+              <h5>👤 Integrante 1 (Web & Orquestación)</h5>
+              <p>Servidor Go nativo en :8080, gestor de ventanas liviano, emulador de terminal interactiva y contratos JSON.</p>
+            </div>
+            <div class="about-card">
+              <h5>👤 Integrante 2 (Core C)</h5>
+              <p>PCB, planificación de CPU (FCFS, SJF, RR, Prioridad) y asignación/traducción de memoria física.</p>
+            </div>
+            <div class="about-card">
+              <h5>👤 Integrante 3 (Sincronización Go)</h5>
+              <p>Semáforos, buffer Productor-Consumidor y problema de los Filósofos Comensales.</p>
+            </div>
+            <div class="about-card">
+              <h5>👤 Integrante 4 (QA & Oráculo Python)</h5>
+              <p>Validación analítica del Ground Truth, pruebas unitarias y diagramas de Gantt automáticos.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="window-resize-handle"></div>
+    </div>
+
+  </div> <!-- /desktop -->
+
+  <!-- ======================================================================
+       MENÚ DE INICIO (START MENU)
+       ====================================================================== -->
+  <div id="start-menu">
+    <div class="start-header">
+      <div class="start-header-avatar">YK</div>
+      <div class="start-header-info">
+        <h4>YaKcheOS</h4>
+        <p>Usuario: guest@uni.edu.pe</p>
+      </div>
+    </div>
+    <div class="start-apps-list">
+      <button class="start-app-item" data-window-target="win-terminal">
+        <span class="app-icon">📟</span>
+        <div class="app-meta">
+          <h5>Terminal CLI</h5>
+          <span>Consola interactiva con comandos Linux</span>
+        </div>
+      </button>
+      <button class="start-app-item" data-window-target="win-tasks">
+        <span class="app-icon">📊</span>
+        <div class="app-meta">
+          <h5>Task Manager</h5>
+          <span>Monitor de procesos y ráfagas de CPU</span>
+        </div>
+      </button>
+      <button class="start-app-item" data-window-target="win-sync">
+        <span class="app-icon">🔄</span>
+        <div class="app-meta">
+          <h5>Sincronización</h5>
+          <span>Semáforos y buffer de concurrencia</span>
+        </div>
+      </button>
+      <button class="start-app-item" data-window-target="win-about">
+        <span class="app-icon">ℹ️</span>
+        <div class="app-meta">
+          <h5>Acerca del Proyecto</h5>
+          <span>Información de roles y arquitectura UNI</span>
+        </div>
+      </button>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       BARRA DE TAREAS INFERIOR (TASKBAR)
+       ====================================================================== -->
+  <footer id="taskbar">
+    <button class="start-button" id="start-button" title="Menú de inicio">
+      <span class="logo-icon">💠</span>
+      <span>Inicio</span>
+    </button>
+
+    <!-- Lista de ventanas activas -->
+    <div class="taskbar-tasks" id="taskbar-tasks"></div>
+
+    <!-- System Tray -->
+    <div class="taskbar-tray">
+      <div class="tray-badge" title="Estado del servidor Go">
+        <span class="tray-pulse"></span>
+        <span>Go :8080 OK</span>
+      </div>
+      <div class="tray-clock">
+        <span id="tray-time">12:00:00</span>
+        <span id="tray-date" class="tray-date">13 oct 2026</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="js/app.js"></script>
+  <script src="js/terminal.js"></script>
+</body>
+</html>
