@@ -17,7 +17,8 @@ BASE_PATH = ROOT / "tests_python/fixtures/procesos_semana4.json"
 
 @pytest.fixture(scope="session")
 def binary(tmp_path_factory):
-    missing = [str(source.relative_to(ROOT)) for source in SOURCES if not source.is_file()]
+    missing = [str(source.relative_to(ROOT)) + (" (vacio)" if source.is_file() else " (no existe)")
+               for source in SOURCES if not source.is_file() or source.stat().st_size == 0]
     if not BASE_PATH.is_file() or not BASE_PATH.read_text(encoding="utf-8").strip():
         missing.append(str(BASE_PATH.relative_to(ROOT)) + " (sin datos)")
     if missing:
