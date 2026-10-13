@@ -31,3 +31,10 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Python y salidas locales del simulador
+__pycache__/
+.pytest_cache/
+*.pyc
+cpu_timeline.json
+plan_de_sprints_yakcheos_6_modulos.md
