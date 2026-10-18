@@ -93,9 +93,9 @@
     </div>
 
     <!-- ======================================================================
-         VENTANA 2: TASK MANAGER / PROCESOS (T1.2)
+         VENTANA 2: TASK MANAGER / PROCESOS & MEMORIA (T1.5)
          ====================================================================== -->
-    <div class="os-window" id="win-tasks" style="top: 90px; left: 420px; width: 660px; height: 420px;">
+    <div class="os-window" id="win-tasks" style="top: 80px; left: 380px; width: 750px; height: 500px;">
       <div class="window-titlebar">
         <div class="window-controls">
           <button class="win-btn win-btn-close" title="Cerrar" aria-label="Cerrar ventana"></button>
@@ -103,81 +103,93 @@
           <button class="win-btn win-btn-maximize" title="Maximizar" aria-label="Maximizar ventana"></button>
         </div>
         <div class="window-title">
-          <span>📊 Task Manager - Monitor de Recursos</span>
+          <span>📊 Task Manager - Monitor de Recursos (M1 & M3)</span>
         </div>
         <div class="window-actions-right">
-          <span>M1: CPU & Procesos</span>
+          <span>v0.5.0-beta</span>
         </div>
       </div>
 
       <div class="window-content">
         <div class="app-view-container">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <div>
-              <h3 style="font-size: 1rem; font-weight: 700; color: #f8fafc;">Procesos en Memoria (Semana 4)</h3>
-              <p style="font-size: 0.78rem; color: #94a3b8;">Contrato activo: <code style="color: #38bdf8;">data/procesos_semana4.json</code></p>
+          <!-- Barra de Control de Simulación (T1.5) -->
+          <div class="sim-toolbar">
+            <div class="sim-controls-group">
+              <label for="select-sim-algo" style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">Algoritmo:</label>
+              <select id="select-sim-algo" class="sim-select">
+                <option value="FCFS" selected>FCFS (First-Come)</option>
+                <option value="SJF">SJF (Shortest Job)</option>
+                <option value="RR">Round Robin (q=4)</option>
+                <option value="PRIORIDAD">Prioridad (No apropiativa)</option>
+              </select>
+              <button id="btn-sim-play" class="sim-btn sim-btn-primary" title="Iniciar simulación automática">▶ Iniciar</button>
+              <button id="btn-sim-step" class="sim-btn" title="Avanzar 1 tick de simulación">⏭ Paso</button>
+              <button id="btn-sim-reset" class="sim-btn" title="Reiniciar simulación">🔄 Reset</button>
             </div>
-            <button id="btn-reload-tasks" class="start-button" style="padding: 4px 10px; font-size: 0.75rem;">Actualizar Datos</button>
+
+            <div class="sim-controls-group">
+              <div class="sim-badge-info">
+                <span>⏱ Reloj:</span>
+                <span id="sim-tick-count">0</span> min
+              </div>
+              <div class="sim-badge-info" style="color: #34d399; border-color: rgba(52,211,153,0.3); background: rgba(52,211,153,0.1);">
+                <span>CPU:</span>
+                <span id="sim-cpu-status">READY</span>
+              </div>
+              <div class="sim-badge-info" style="color: #fbbf24; border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.1);">
+                <span>W_prom:</span>
+                <span id="sim-w-prom">5.75m</span>
+              </div>
+            </div>
           </div>
 
+          <!-- Tabla en vivo de procesos con columnas ordenables (T1.5) -->
           <table class="pm-table" id="table-processes">
             <thead>
               <tr>
-                <th>PID</th>
-                <th>Nombre</th>
-                <th>Llegada (t)</th>
-                <th>Ráfaga (Burst)</th>
-                <th>Prioridad</th>
-                <th>Memoria</th>
-                <th>Estado</th>
+                <th class="sortable-th" data-sort="pid">PID <span class="sort-icon">▲▼</span></th>
+                <th class="sortable-th" data-sort="name">Nombre <span class="sort-icon">▲▼</span></th>
+                <th class="sortable-th" data-sort="arrival">Llegada <span class="sort-icon">▲▼</span></th>
+                <th class="sortable-th" data-sort="burst">Ráfaga <span class="sort-icon">▲▼</span></th>
+                <th class="sortable-th" data-sort="remaining">Restante <span class="sort-icon">▲▼</span></th>
+                <th class="sortable-th" data-sort="priority">Prioridad <span class="sort-icon">▲▼</span></th>
+                <th class="sortable-th" data-sort="memory">RAM <span class="sort-icon">▲▼</span></th>
+                <th class="sortable-th" data-sort="state">Estado <span class="sort-icon">▲▼</span></th>
+                <th style="text-align: center;">Acción</th>
               </tr>
             </thead>
             <tbody id="tbody-processes">
-              <tr>
-                <td>1</td>
-                <td><strong style="color: #38bdf8;">P1</strong></td>
-                <td>0 min</td>
-                <td>5 min</td>
-                <td>3</td>
-                <td>128 KB</td>
-                <td><span class="pm-badge" style="background: rgba(16,185,129,0.2); color: #34d399;">READY</span></td>
-              </tr>
-              <tr>
-                <td>2</td>
-                <td><strong style="color: #38bdf8;">P2</strong></td>
-                <td>1 min</td>
-                <td>3 min</td>
-                <td>4</td>
-                <td>64 KB</td>
-                <td><span class="pm-badge" style="background: rgba(16,185,129,0.2); color: #34d399;">READY</span></td>
-              </tr>
-              <tr>
-                <td>3</td>
-                <td><strong style="color: #38bdf8;">P3</strong></td>
-                <td>2 min</td>
-                <td>8 min</td>
-                <td>1</td>
-                <td>256 KB</td>
-                <td><span class="pm-badge" style="background: rgba(16,185,129,0.2); color: #34d399;">READY</span></td>
-              </tr>
-              <tr>
-                <td>4</td>
-                <td><strong style="color: #38bdf8;">P4</strong></td>
-                <td>3 min</td>
-                <td>6 min</td>
-                <td>2</td>
-                <td>128 KB</td>
-                <td><span class="pm-badge" style="background: rgba(16,185,129,0.2); color: #34d399;">READY</span></td>
-              </tr>
+              <!-- Se puebla dinámicamente vía app.js -->
             </tbody>
           </table>
 
-          <div class="gantt-preview-container">
-            <div style="display: flex; justify-content: space-between; font-size: 0.78rem;">
-              <span style="font-weight: 600; color: #cbd5e1;">Esquema de Planificación FCFS (Caso Base de Clase)</span>
-              <span style="color: #38bdf8; font-family: var(--font-mono);">W_prom: 5.75 min | Duración total: 22 min</span>
+          <!-- Mapa Gráfico de Bloques de Memoria RAM (T1.5) -->
+          <div class="memory-map-section">
+            <div class="memory-map-header">
+              <span style="font-weight: 700; color: #f8fafc;">🗺️ Mapa Gráfico de Bloques de Memoria (RAM - 1024 KB Contiguos)</span>
+              <span style="color: #38bdf8; font-family: var(--font-mono); font-size: 0.74rem;">
+                En Uso: <strong id="mem-used-txt">576 KB</strong> | Hueco Libre: <strong id="mem-free-txt">448 KB</strong>
+              </span>
             </div>
-            <div class="gantt-bar">
+            <div class="memory-map-bar" id="memory-map-bar">
+              <!-- Bloques dinámicos renderizados por app.js -->
+            </div>
+            <div class="memory-legend" id="memory-map-legend">
+              <div class="mem-legend-item"><div class="mem-legend-color" style="background:#3b82f6;"></div><span>P1 (128 KB)</span></div>
+              <div class="mem-legend-item"><div class="mem-legend-color" style="background:#10b981;"></div><span>P2 (64 KB)</span></div>
+              <div class="mem-legend-item"><div class="mem-legend-color" style="background:#f59e0b;"></div><span>P3 (256 KB)</span></div>
+              <div class="mem-legend-item"><div class="mem-legend-color" style="background:#8b5cf6;"></div><span>P4 (128 KB)</span></div>
+              <div class="mem-legend-item"><div class="mem-legend-color" style="background:rgba(71,85,105,0.6);"></div><span>Hueco Libre (448 KB)</span></div>
+            </div>
+          </div>
+
+          <!-- Previsualización Dinámica del Gantt de CPU -->
+          <div class="gantt-preview-container" style="margin-top: 12px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.78rem;">
+              <span style="font-weight: 600; color: #cbd5e1;">Línea de Tiempo de Ejecución (Gantt - Semana 4)</span>
+              <span id="gantt-summary-txt" style="color: #38bdf8; font-family: var(--font-mono);">FCFS: P1(5m) &rarr; P2(3m) &rarr; P3(8m) &rarr; P4(6m) | Duración: 22 min</span>
+            </div>
+            <div class="gantt-bar" id="gantt-bar">
               <div class="gantt-segment" style="flex: 5; background: #3b82f6;" title="P1: [0-5]">P1 (5m)</div>
               <div class="gantt-segment" style="flex: 3; background: #10b981;" title="P2: [5-8]">P2 (3m)</div>
               <div class="gantt-segment" style="flex: 8; background: #f59e0b;" title="P3: [8-16]">P3 (8m)</div>
@@ -190,9 +202,9 @@
     </div>
 
     <!-- ======================================================================
-         VENTANA 3: SINCRONIZACIÓN (T1.2)
+         VENTANA 3: SINCRONIZACIÓN Y CONCURRENCIA (T1.6)
          ====================================================================== -->
-    <div class="os-window" id="win-sync" style="top: 130px; left: 160px; width: 620px; height: 380px;">
+    <div class="os-window" id="win-sync" style="top: 110px; left: 140px; width: 730px; height: 500px;">
       <div class="window-titlebar">
         <div class="window-controls">
           <button class="win-btn win-btn-close" title="Cerrar" aria-label="Cerrar ventana"></button>
@@ -200,47 +212,162 @@
           <button class="win-btn win-btn-maximize" title="Maximizar" aria-label="Maximizar ventana"></button>
         </div>
         <div class="window-title">
-          <span>🔄 Sincronización - Módulo de Concurrencia</span>
+          <span>🔄 Sincronización, Concurrencia & Memoria (M2 & M3)</span>
         </div>
         <div class="window-actions-right">
-          <span>M2: Semana 5</span>
+          <span>Semana 5 & 6</span>
         </div>
       </div>
 
       <div class="window-content">
         <div class="app-view-container">
-          <h4 style="font-size: 0.95rem; margin-bottom: 6px; color: #f8fafc;">Buffer Productor - Consumidor (Capacidad = 5)</h4>
-          <p style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 12px;">
-            Semáforos activos: <code style="color: #34d399;">mutex = 1</code> | <code style="color: #60a5fa;">vacios = 5</code> | <code style="color: #f59e0b;">llenos = 0</code>
-          </p>
+          <!-- Pestañas de Navegación del Módulo -->
+          <div class="window-tabs">
+            <button class="window-tab active" data-tab-target="tab-philosophers">🍝 Filósofos Comensales (M2)</button>
+            <button class="window-tab" data-tab-target="tab-prodcons">📦 Productor - Consumidor (M2)</button>
+            <button class="window-tab" data-tab-target="tab-mmu">🧠 MMU & Paginación (M3)</button>
+          </div>
 
-          <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 18px;">
-            <div style="background: rgba(30,41,59,0.8); border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; padding: 14px; text-align: center;">
-              <span style="font-size: 0.75rem; color: #64748b;">Slot 0</span>
-              <div style="font-size: 0.8rem; font-weight: 700; color: #94a3b8; margin-top: 4px;">VACÍO</div>
+          <!-- TAB 1: FILÓSOFOS COMENSALES & DETECTOR DE DEADLOCK (T1.6) -->
+          <div class="tab-pane active" id="tab-philosophers">
+            <div class="sim-toolbar" style="margin-bottom: 8px;">
+              <div class="sim-controls-group">
+                <label for="select-philo-mode" style="font-size: 0.74rem; color: #94a3b8; font-weight: 600;">Modalidad:</label>
+                <select id="select-philo-mode" class="sim-select">
+                  <option value="deadlock" selected>Deadlock Demostrativo (Espera Circular)</option>
+                  <option value="preventiva">Preventiva Asimétrica (Sin Deadlock)</option>
+                </select>
+                <button id="btn-philo-play" class="sim-btn sim-btn-primary">▶ Iniciar</button>
+                <button id="btn-philo-step" class="sim-btn">⏭ Paso</button>
+                <button id="btn-philo-reset" class="sim-btn">🔄 Reset</button>
+              </div>
+              <div class="sim-badge-info" id="philo-mode-badge" style="color: #f87171;">
+                Espera Circular
+              </div>
             </div>
-            <div style="background: rgba(30,41,59,0.8); border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; padding: 14px; text-align: center;">
-              <span style="font-size: 0.75rem; color: #64748b;">Slot 1</span>
-              <div style="font-size: 0.8rem; font-weight: 700; color: #94a3b8; margin-top: 4px;">VACÍO</div>
+
+            <!-- Banner Alerta de Deadlock RAG (T3.4 / T1.6) -->
+            <div id="deadlock-alert-banner" class="deadlock-alert">
+              <strong>🛑 ALERTA RAG (Deadlock Detectado):</strong>
+              <span id="deadlock-alert-details">Existe un ciclo de espera circular entre los 5 filósofos y sus tenedores. Estado bloqueado irreversible.</span>
             </div>
-            <div style="background: rgba(30,41,59,0.8); border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; padding: 14px; text-align: center;">
-              <span style="font-size: 0.75rem; color: #64748b;">Slot 2</span>
-              <div style="font-size: 0.8rem; font-weight: 700; color: #94a3b8; margin-top: 4px;">VACÍO</div>
+
+            <!-- Arena Circular de Filósofos (T1.6) -->
+            <div class="philosophers-arena" id="philosophers-arena">
+              <div class="table-center-plate">
+                <span style="font-size: 1.2rem;">🍝</span>
+                <span style="font-weight: 700; color: #f8fafc; font-size: 0.7rem;">Mesa Redonda</span>
+                <span>5 Recursos</span>
+              </div>
+              <!-- Filósofos y tenedores renderizados dinámicamente -->
             </div>
-            <div style="background: rgba(30,41,59,0.8); border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; padding: 14px; text-align: center;">
-              <span style="font-size: 0.75rem; color: #64748b;">Slot 3</span>
-              <div style="font-size: 0.8rem; font-weight: 700; color: #94a3b8; margin-top: 4px;">VACÍO</div>
-            </div>
-            <div style="background: rgba(30,41,59,0.8); border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; padding: 14px; text-align: center;">
-              <span style="font-size: 0.75rem; color: #64748b;">Slot 4</span>
-              <div style="font-size: 0.8rem; font-weight: 700; color: #94a3b8; margin-top: 4px;">VACÍO</div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 0.74rem; color: #94a3b8;">
+              <div>Leyenda: <span style="color:#38bdf8;">🧠 Pensando</span> | <span style="color:#fbbf24;">⏳ Con Hambre</span> | <span style="color:#34d399;">🍝 Comiendo</span> | <span style="color:#f87171;">🛑 Interbloqueado</span></div>
+              <div id="philo-stats-txt" style="font-family: var(--font-mono);">Platos consumidos: 0</div>
             </div>
           </div>
 
-          <h4 style="font-size: 0.95rem; margin-bottom: 6px; color: #f8fafc;">Filósofos Comensales (5 Procesos Circulares)</h4>
-          <p style="font-size: 0.78rem; color: #94a3b8;">
-            Modalidades del modelo: <span class="pm-badge" style="background: rgba(59,130,246,0.2); color: #93c5fd;">Asimétrica (Preventiva)</span> y <span class="pm-badge" style="background: rgba(239,68,68,0.2); color: #fca5a5;">Deadlock Demostrativo</span>.
-          </p>
+          <!-- TAB 2: BUFFER PRODUCTOR - CONSUMIDOR (T1.6) -->
+          <div class="tab-pane" id="tab-prodcons" style="display: none;">
+            <!-- Semáforos Contadores -->
+            <div class="semaphores-grid" style="margin-bottom: 12px;">
+              <div class="sem-card">
+                <div class="sem-title">Semáforo Mutex</div>
+                <div class="sem-val sem-val-mutex" id="sem-val-mutex">1</div>
+                <span style="font-size: 0.68rem; color: #64748b;">Exclusión Mutua</span>
+              </div>
+              <div class="sem-card">
+                <div class="sem-title">Semáforo Vacíos</div>
+                <div class="sem-val sem-val-empty" id="sem-val-empty">5</div>
+                <span style="font-size: 0.68rem; color: #64748b;">Slots Disponibles</span>
+              </div>
+              <div class="sem-card">
+                <div class="sem-title">Semáforo Llenos</div>
+                <div class="sem-val sem-val-full" id="sem-val-full">0</div>
+                <span style="font-size: 0.68rem; color: #64748b;">Items Disponibles</span>
+              </div>
+            </div>
+
+            <!-- Visualización de los 5 Slots del Buffer -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-weight: 700; font-size: 0.8rem; color: #f8fafc;">Buffer Circular Acotado (Capacidad = 5 items)</span>
+              <div class="sim-controls-group">
+                <button id="btn-prod-item" class="sim-btn sim-btn-primary" style="padding: 3px 8px; font-size: 0.72rem;">➕ Producir</button>
+                <button id="btn-cons-item" class="sim-btn" style="padding: 3px 8px; font-size: 0.72rem;">➖ Consumir</button>
+                <button id="btn-prodcons-auto" class="sim-btn" style="padding: 3px 8px; font-size: 0.72rem;">▶ Auto-Run</button>
+              </div>
+            </div>
+
+            <div id="prodcons-slots-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 10px;">
+              <!-- Slots 0..4 renderizados por JS -->
+            </div>
+
+            <!-- Registro de Eventos Atómicos -->
+            <span style="font-weight: 600; font-size: 0.74rem; color: #94a3b8;">Registro de Eventos y Estados Concurrente:</span>
+            <div class="sync-log-box" id="sync-log-box">
+              <div class="sync-log-line"><span style="color:#38bdf8;">[INIT]</span> Buffer inicializado. Capacidad: 5, mutex=1, vacios=5, llenos=0.</div>
+            </div>
+          </div>
+
+          <!-- TAB 3: MMU, TRADUCCIÓN & REEMPLAZO DE PÁGINAS (M3 / T1.4 & T2.6) -->
+          <div class="tab-pane" id="tab-mmu" style="display: none;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px;">
+              <!-- 1. Traductor de Paginación -->
+              <div class="about-card" style="margin-top: 0;">
+                <h5 style="color: #38bdf8;">1. Paginación MMU (Lámina 6)</h5>
+                <p style="margin-bottom: 8px;">Tamaño de página = 4096 B. Proceso #100.</p>
+                <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                  <input type="number" id="input-mmu-virtual" class="sim-select" value="10000" style="width: 100px;" placeholder="Dir. Virtual">
+                  <button id="btn-calc-mmu" class="sim-btn sim-btn-primary">Traducir</button>
+                </div>
+                <div id="mmu-result-box" style="font-family: var(--font-mono); font-size: 0.72rem; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px;">
+                  <div>Página: <span style="color:#38bdf8;">2</span> (Marco: <span style="color:#34d399;">7</span>)</div>
+                  <div>Desplazamiento: <span style="color:#fbbf24;">1808</span></div>
+                  <div>Dirección Física: <strong style="color:#34d399; font-size: 0.85rem;">30480</strong></div>
+                </div>
+              </div>
+
+              <!-- 2. Segmentación con Base y Límite & Trap Detection (T2.6 / T1.4) -->
+              <div class="about-card" style="margin-top: 0;">
+                <h5 style="color: #34d399;">2. Segmentación (Lámina 7)</h5>
+                <p style="margin-bottom: 8px;">Base + Offset con validación de Límite / Trap.</p>
+                <div style="display: flex; gap: 4px; margin-bottom: 6px;">
+                  <select id="select-seg-id" class="sim-select" style="font-size: 0.7rem; padding: 4px;">
+                    <option value="0">Seg 0: Código (Base 1000, Lím 400)</option>
+                    <option value="1" selected>Seg 1: Datos (Base 5200, Lím 800)</option>
+                    <option value="2">Seg 2: Pila (Base 9000, Lím 300)</option>
+                  </select>
+                  <input type="number" id="input-seg-offset" class="sim-select" value="300" style="width: 65px;" placeholder="Offset">
+                  <button id="btn-calc-seg" class="sim-btn sim-btn-primary" style="padding: 3px 6px;">OK</button>
+                </div>
+                <div style="display: flex; gap: 4px; margin-bottom: 6px;">
+                  <button id="btn-test-seg-valid" class="sim-btn" style="font-size:0.65rem; padding: 2px 4px;">Válido (1, 300)</button>
+                  <button id="btn-test-seg-trap" class="sim-btn" style="font-size:0.65rem; padding: 2px 4px; color:#f87171; border-color:rgba(248,113,113,0.4);">Trap (1, 900)</button>
+                </div>
+                <div id="seg-result-box" style="font-family: var(--font-mono); font-size: 0.72rem; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px;">
+                  <div>Segmento: <span style="color:#38bdf8;">Datos (ID: 1)</span></div>
+                  <div>Base: 5200 | Límite: 800</div>
+                  <div>Dirección Física: <strong style="color:#34d399; font-size: 0.85rem;">5500</strong></div>
+                </div>
+              </div>
+
+              <!-- 3. Reemplazo de Páginas y Belady -->
+              <div class="about-card" style="margin-top: 0;">
+                <h5 style="color: #a78bfa;">3. Reemplazo (Belády)</h5>
+                <p style="margin-bottom: 8px;">Patrón: <code>1,2,3,4,1,2,5,1,2,3,4,5</code></p>
+                <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                  <button id="btn-calc-replace" class="sim-btn sim-btn-primary">Comparar Fallos</button>
+                </div>
+                <div id="replace-result-box" style="font-family: var(--font-mono); font-size: 0.72rem; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px;">
+                  <div>FIFO (3 marcos): <strong style="color:#f87171;">9 fallos</strong></div>
+                  <div>FIFO (4 marcos): <strong style="color:#ef4444;">10 fallos</strong> (¡Belády!)</div>
+                  <div>Óptimo (3 marcos): <strong style="color:#34d399;">7 fallos</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
       <div class="window-resize-handle"></div>

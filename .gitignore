@@ -9,6 +9,7 @@
 *.dylib
 /server
 *.o
+bin/
 
 # Simulation runtime artifacts
 cpu_timeline.json

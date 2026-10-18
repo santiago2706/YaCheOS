@@ -28,8 +28,11 @@ func resolveBaseDir() string {
 }
 
 // setupRouter configura las rutas HTTP del servidor nativo.
-func setupRouter(webDir, dataDir string) http.Handler {
+func setupRouter(webDir, dataDir, baseDir string) http.Handler {
 	mux := http.NewServeMux()
+
+	// Inicializar manejadores del núcleo (C y Go)
+	core := NewCoreHandlers(baseDir)
 
 	// Servir archivos estáticos del frontend (escritorio, terminal, estilos y scripts)
 	fsWeb := http.FileServer(http.Dir(webDir))
@@ -41,11 +44,20 @@ func setupRouter(webDir, dataDir string) http.Handler {
 		mux.Handle("/data/", fsData)
 	}
 
+	// Endpoints de Integración M1 y M3 (Sprint 2 - T1.4)
+	mux.HandleFunc("/api/v1/cpu/schedule", core.HandleCPUSchedule)
+	mux.HandleFunc("/api/v1/memory/translate", core.HandleMemoryTranslate)
+	mux.HandleFunc("/api/v1/memory/replace", core.HandlePageReplacement)
+
+	// Endpoints de Sincronización M2 (Sprint 2 - T1.6)
+	mux.HandleFunc("/api/v1/sync/status", core.HandleSyncStatus)
+	mux.HandleFunc("/api/v1/sync/step", core.HandleSyncStep)
+
 	// Endpoint de verificación de estado y bienvenida del sistema
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok","system":"YaKcheOS","version":"0.1.0-alpha","sprint":1,"role":"Integrante 1: Lider Tecnico & Orquestador Web"}`))
+		_, _ = w.Write([]byte(`{"status":"ok","system":"YaKcheOS","version":"v0.5.0-beta","sprint":2,"role":"Integrante 1: Lider Tecnico & Orquestador Web"}`))
 	})
 
 	return mux
@@ -61,15 +73,22 @@ func main() {
 	webDir := filepath.Join(baseDir, "web")
 	dataDir := filepath.Join(baseDir, "data")
 
-	handler := setupRouter(webDir, dataDir)
+	handler := setupRouter(webDir, dataDir, baseDir)
 	addr := fmt.Sprintf(":%s", port)
 
 	log.Println("==================================================")
 	log.Println("  YaKcheOS Web Server - UNI FIIS SO-2026")
 	log.Println("  Integrante 1: Lider Tecnico & Orquestador Web")
+	log.Println("  Version: v0.5.0-beta (Sprint 2 Completado)")
 	log.Printf("  Servidor escuchando en: http://localhost:%s\n", port)
 	log.Printf("  Directorio Web:        %s\n", webDir)
 	log.Printf("  Directorio Data:       %s\n", dataDir)
+	log.Println("  Endpoints Activos:")
+	log.Println("    - POST/GET /api/v1/cpu/schedule")
+	log.Println("    - POST/GET /api/v1/memory/translate")
+	log.Println("    - POST/GET /api/v1/memory/replace")
+	log.Println("    - GET      /api/v1/sync/status")
+	log.Println("    - POST/GET /api/v1/sync/step")
 	log.Println("==================================================")
 
 	if err := http.ListenAndServe(addr, handler); err != nil {

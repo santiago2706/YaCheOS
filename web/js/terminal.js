@@ -122,6 +122,26 @@ class TerminalCLI {
         this.appendEntry(rawCmd, `<span>${this.escapeHtml(args.join(' '))}</span>`);
         break;
 
+      case 'kill':
+        this.handleKillCommand(rawCmd, args);
+        break;
+
+      case 'mmu':
+        this.handleMmuCommand(rawCmd, args);
+        break;
+
+      case 'seg':
+        this.handleSegCommand(rawCmd, args);
+        break;
+
+      case 'replace':
+        this.handleReplaceCommand(rawCmd, args);
+        break;
+
+      case 'sync':
+        this.handleSyncCommand(rawCmd, args);
+        break;
+
       case 'open':
         this.handleOpenCommand(rawCmd, args);
         break;
@@ -161,7 +181,7 @@ class TerminalCLI {
 
   getHelpOutput() {
     return `
-<div class="term-bold term-cyan">Comandos Disponibles en YaKcheOS CLI (Taller Semana 2):</div>
+<div class="term-bold term-cyan">Comandos Disponibles en YaKcheOS CLI (Módulos 1, 2 y 3 - Sprint 2):</div>
 <table class="term-table">
   <thead>
     <tr>
@@ -180,27 +200,39 @@ class TerminalCLI {
     </tr>
     <tr>
       <td><span class="term-green">ps</span></td>
-      <td>Muestra los procesos activos en la simulación (PID, estado, ráfagas).</td>
+      <td>Muestra los procesos activos en la simulación (PID, estado, ráfagas, RAM).</td>
     </tr>
     <tr>
-      <td><span class="term-green">run &lt;algo&gt; &lt;archivo.json&gt;</span></td>
-      <td>Ejecuta planificación de CPU (FCFS, SJF, RR, PRIORIDAD) con datos de contrato.</td>
+      <td><span class="term-green">run &lt;algo&gt; [archivo] [q]</span></td>
+      <td>Ejecuta planificación de CPU (FCFS, SJF, RR, PRIORIDAD) invocando el motor C.</td>
     </tr>
     <tr>
-      <td><span class="term-green">ls</span></td>
-      <td>Lista archivos del simulador (preparatorio para VFS Semana 3).</td>
+      <td><span class="term-green">kill &lt;PID&gt;</span></td>
+      <td>Termina un proceso en simulación y libera su bloque de memoria RAM (T1.5).</td>
     </tr>
     <tr>
-      <td><span class="term-green">mkdir &lt;nombre&gt;</span></td>
-      <td>Crea un directorio simulado (preparatorio para VFS Semana 3).</td>
+      <td><span class="term-green">mmu &lt;dir_virtual&gt; [page_size]</span></td>
+      <td>Traductor MMU de direcciones virtuales a físicas por paginación (M3).</td>
     </tr>
     <tr>
-      <td><span class="term-green">cat &lt;archivo&gt;</span></td>
-      <td>Lee y muestra el contenido de archivos (ej. contratos JSON).</td>
+      <td><span class="term-green">seg &lt;seg_id&gt; &lt;offset&gt;</span></td>
+      <td>Traductor de segmentación con detección de violación de límite / Trap (M3).</td>
+    </tr>
+    <tr>
+      <td><span class="term-green">replace [frames]</span></td>
+      <td>Compara fallos FIFO, LRU, Óptimo y verifica la Anomalía de Belády (M3).</td>
+    </tr>
+    <tr>
+      <td><span class="term-green">sync &lt;status|step|deadlock|preventive&gt;</span></td>
+      <td>Controla la sincronización concurrente (filósofos y buffer en Go) (M2).</td>
     </tr>
     <tr>
       <td><span class="term-green">open &lt;tasks|sync|about&gt;</span></td>
       <td>Abre la ventana gráfica correspondiente en el escritorio.</td>
+    </tr>
+    <tr>
+      <td><span class="term-green">cat &lt;archivo&gt;</span> | <span class="term-green">ls</span> | <span class="term-green">mkdir</span></td>
+      <td>Comandos del sistema de archivos (preparatorio para VFS Semana 3).</td>
     </tr>
     <tr>
       <td><span class="term-green">uname -a</span> | <span class="term-green">date</span> | <span class="term-green">echo</span></td>
@@ -263,74 +295,239 @@ class TerminalCLI {
     }
   }
 
-  handleRunCommand(rawCmd, args) {
-    if (args.length < 2) {
+  async handleRunCommand(rawCmd, args) {
+    if (args.length < 1) {
       this.appendEntry(
         rawCmd,
-        `<span class="term-rose">Uso incorrecto. Sintaxis: run &lt;FCFS|SJF|RR|PRIORIDAD&gt; &lt;archivo.json&gt;</span><br><span class="term-gray">Ejemplo: run FCFS data/procesos_semana4.json</span>`
+        `<span class="term-rose">Uso: run &lt;FCFS|SJF|RR|PRIORIDAD&gt; [archivo.json] [quantum]</span><br><span class="term-gray">Ejemplo: run FCFS data/procesos_semana4.json</span>`
       );
       return;
     }
 
     const algo = args[0].toUpperCase();
-    const file = args[1];
+    const file = args[1] || 'data/procesos_semana4.json';
+    const quantum = args[2] || '4';
 
-    let metricsHtml = '';
+    try {
+      const res = await fetch(`/api/v1/cpu/schedule?algo=${encodeURIComponent(algo)}&file=${encodeURIComponent(file)}&quantum=${encodeURIComponent(quantum)}`);
+      const data = await res.json();
 
-    if (algo === 'FCFS') {
-      metricsHtml = `
-<div class="term-green term-bold">[SIMULACIÓN CPU] Algoritmo: First-Come, First-Served (FCFS)</div>
-<div>Archivo de entrada: <span class="term-cyan">${this.escapeHtml(file)}</span></div>
-<div style="margin-top: 6px;">Traza de Ejecución (Gantt):</div>
-<div class="term-amber" style="font-family: monospace; padding: 4px 0;">[0]--P1(5m)--[5]--P2(3m)--[8]--P3(8m)--[16]--P4(6m)--[22]</div>
+      if (!res.ok) {
+        this.appendEntry(rawCmd, `<span class="term-rose">Error C (${res.status}): ${this.escapeHtml(data.error || 'Fallo de simulacion')}</span><br><span class="term-gray">${this.escapeHtml(data.details || '')}</span>`);
+        return;
+      }
+
+      let ganttStr = '';
+      if (data.timeline && data.timeline.length > 0) {
+        ganttStr = data.timeline.map(t => `[${t.start}]--${t.name}(${t.duration}m)--[${t.end}]`).join('');
+      }
+
+      let rows = '';
+      if (data.processes && data.processes.length > 0) {
+        data.processes.forEach(p => {
+          rows += `<tr>
+            <td>${p.name} (PID ${p.pid})</td>
+            <td>${p.waiting_time} min</td>
+            <td>${p.turnaround_time} min</td>
+            <td>${p.response_time !== undefined ? p.response_time + ' min' : '-'}</td>
+          </tr>`;
+        });
+      }
+
+      const metricsHtml = `
+<div class="term-green term-bold">[MOTOR C OK - Latencia: ${data.latency_ms || 0}ms] Planificación: ${data.algorithm}</div>
+<div>Archivo: <span class="term-cyan">${this.escapeHtml(file)}</span> ${algo === 'RR' ? `| Quantum: <span class="term-amber">${quantum} min</span>` : ''}</div>
+<div style="margin-top: 6px;">Traza de Ejecución (Gantt determinista):</div>
+<div class="term-amber" style="font-family: monospace; padding: 4px 0; word-break: break-all;">${ganttStr}</div>
 <table class="term-table">
   <thead>
-    <tr><th>Proceso</th><th>Espera (W_i)</th><th>Retorno (T_i)</th></tr>
+    <tr><th>Proceso</th><th>Espera (W_i)</th><th>Retorno (T_i)</th><th>Respuesta (R_i)</th></tr>
   </thead>
   <tbody>
-    <tr><td>P1</td><td>0 min</td><td>5 min</td></tr>
-    <tr><td>P2</td><td>4 min</td><td>7 min</td></tr>
-    <tr><td>P3</td><td>6 min</td><td>14 min</td></tr>
-    <tr><td>P4</td><td>13 min</td><td>19 min</td></tr>
+    ${rows}
   </tbody>
 </table>
-<div class="term-cyan term-bold">Espera Promedio (W_prom): 5.75 min | Retorno Promedio: 11.25 min</div>
+<div class="term-cyan term-bold">
+  Espera Promedio: ${data.average_waiting_time} min | Retorno Promedio: ${data.average_turnaround_time} min | Respuesta Promedio: ${data.average_response_time} min
+</div>
 `;
-    } else if (algo === 'SJF') {
-      metricsHtml = `
-<div class="term-green term-bold">[SIMULACIÓN CPU] Algoritmo: Shortest Job First (SJF No Apropiativo)</div>
-<div>Archivo de entrada: <span class="term-cyan">${this.escapeHtml(file)}</span></div>
-<div style="margin-top: 6px;">Traza de Ejecución (Gantt):</div>
-<div class="term-amber" style="font-family: monospace; padding: 4px 0;">[0]--P1(5m)--[5]--P2(3m)--[8]--P4(6m)--[14]--P3(8m)--[22]</div>
-<div class="term-cyan term-bold">Espera Promedio (W_prom): 5.25 min (Menor espera promedio teórica)</div>
-`;
-    } else if (algo === 'RR' || algo === 'ROUNDROBIN') {
-      metricsHtml = `
-<div class="term-green term-bold">[SIMULACIÓN CPU] Algoritmo: Round Robin (Quantum = 4 min)</div>
-<div>Archivo de entrada: <span class="term-cyan">${this.escapeHtml(file)}</span></div>
-<div style="margin-top: 6px;">Traza de Ejecución (Gantt):</div>
-<div class="term-amber" style="font-family: monospace; padding: 4px 0;">P1(4) &rarr; P2(3) &rarr; P3(4) &rarr; P4(4) &rarr; P1(1) &rarr; P3(4) &rarr; P4(2)</div>
-<div class="term-cyan term-bold">Espera Promedio (W_prom): 9.25 min | Respuesta Promedio: 4.0 min</div>
-`;
-    } else if (algo === 'PRIORIDAD' || algo === 'PRIORITY') {
-      metricsHtml = `
-<div class="term-green term-bold">[SIMULACIÓN CPU] Algoritmo: Prioridad No Apropiativa (1 = Más Alta)</div>
-<div>Archivo de entrada: <span class="term-cyan">${this.escapeHtml(file)}</span></div>
-<div style="margin-top: 6px;">Traza de Ejecución (Gantt):</div>
-<div class="term-amber" style="font-family: monospace; padding: 4px 0;">P1(5) &rarr; P3(8) &rarr; P4(6) &rarr; P2(3)</div>
-<div class="term-cyan term-bold">Espera Promedio (W_prom): 7.75 min</div>
-`;
-    } else {
-      metricsHtml = `
-<span class="term-rose">Algoritmo '${this.escapeHtml(algo)}' no soportado. Algoritmos válidos: FCFS, SJF, RR, PRIORIDAD.</span>
-`;
+      this.appendEntry(rawCmd, metricsHtml);
+
+      // Sincronizar y abrir la ventana de Task Manager
+      if (window.osManager) {
+        window.osManager.openWindow('win-tasks');
+      }
+      if (window.taskManager) {
+        const select = document.getElementById('select-sim-algo');
+        if (select) select.value = algo;
+        window.taskManager.currentAlgo = algo;
+        await window.taskManager.fetchScheduleData();
+        window.taskManager.reset();
+      }
+    } catch (err) {
+      this.appendEntry(rawCmd, `<span class="term-rose">Fallo de conexion con API /api/v1/cpu/schedule: ${this.escapeHtml(err.message)}</span>`);
     }
+  }
 
-    this.appendEntry(rawCmd, metricsHtml);
+  handleKillCommand(rawCmd, args) {
+    if (args.length === 0) {
+      this.appendEntry(rawCmd, `<span class="term-rose">Uso: kill &lt;PID&gt;</span>`);
+      return;
+    }
+    const pid = parseInt(args[0], 10);
+    if (isNaN(pid)) {
+      this.appendEntry(rawCmd, `<span class="term-rose">kill: argumento PID inválido: '${this.escapeHtml(args[0])}'</span>`);
+      return;
+    }
+    if (window.taskManager) {
+      const p = window.taskManager.processes.find(x => x.pid === pid);
+      if (!p) {
+        this.appendEntry(rawCmd, `<span class="term-rose">kill: no existe proceso con PID ${pid} en la simulación</span>`);
+        return;
+      }
+      if (p.state === 'TERMINATED') {
+        this.appendEntry(rawCmd, `<span class="term-amber">kill: el proceso ${p.name} (PID ${pid}) ya se encuentra TERMINATED.</span>`);
+        return;
+      }
+      window.taskManager.killProcess(pid);
+      this.appendEntry(rawCmd, `<span class="term-green">[SIGTERM] Proceso ${p.name} (PID ${pid}) terminado exitosamente. Bloque de memoria liberado y huecos contiguos fusionados.</span>`);
+    } else {
+      this.appendEntry(rawCmd, `<span class="term-rose">Task Manager no inicializado.</span>`);
+    }
+  }
 
-    // Refrescar y abrir la ventana de Task Manager si está disponible
-    if (window.osManager) {
-      window.osManager.openWindow('win-tasks');
+  async handleMmuCommand(rawCmd, args) {
+    const virtualAddr = args[0] || '10000';
+    const pageSize = args[1] || '4096';
+    try {
+      const res = await fetch(`/api/v1/memory/translate?virtual=${encodeURIComponent(virtualAddr)}&page_size=${encodeURIComponent(pageSize)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        this.appendEntry(rawCmd, `<span class="term-rose">Fallo MMU (${res.status}): ${this.escapeHtml(data.error || '')}</span>`);
+        return;
+      }
+      this.appendEntry(rawCmd, `
+<div class="term-green term-bold">[MMU Paginación - Motor C OK]</div>
+<div>Dirección Virtual: <span class="term-cyan">${data.virtual_address}</span> | Tamaño Página: <span class="term-amber">${data.page_size} B</span></div>
+<div>Número de Página (p): <span class="term-cyan">${data.page_number}</span> &rarr; Marco Asignado (f): <span class="term-green">${data.frame_number}</span></div>
+<div>Desplazamiento (d): <span class="term-amber">${data.offset}</span></div>
+<div>Dirección Física (f &times; 4096 + d): <strong class="term-green" style="font-size:1.1em;">${data.physical_address}</strong></div>
+      `);
+    } catch (err) {
+      this.appendEntry(rawCmd, `<span class="term-rose">Error al consultar MMU: ${this.escapeHtml(err.message)}</span>`);
+    }
+  }
+
+  async handleSegCommand(rawCmd, args) {
+    if (args.length < 2) {
+      this.appendEntry(rawCmd, `<span class="term-rose">Uso: seg &lt;segment_id: 0=Codigo, 1=Datos, 2=Pila&gt; &lt;offset&gt;</span><br><span class="term-gray">Ejemplo válido: seg 1 300 &rarr; 5500 | Ejemplo Trap: seg 1 900 &rarr; Exception</span>`);
+      return;
+    }
+    const segId = args[0];
+    const offset = args[1];
+    try {
+      const res = await fetch(`/api/v1/memory/translate?mode=segmentation&segment=${encodeURIComponent(segId)}&offset=${encodeURIComponent(offset)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        this.appendEntry(rawCmd, `
+<div class="term-rose term-bold">🛑 [TRAP / EXCEPCIÓN DETECTADA]</div>
+<div class="term-rose">${this.escapeHtml(data.details || data.error || 'Violación de segmento')}</div>
+<div class="term-gray">El desplazamiento ${offset} supera el límite del segmento ${segId}. Señal SIGSEGV simulada.</div>
+        `);
+        return;
+      }
+      this.appendEntry(rawCmd, `
+<div class="term-green term-bold">[Segmentación MMU - Motor C OK]</div>
+<div>Segmento: <span class="term-cyan">${data.segment_name} (ID: ${data.segment_id})</span> | Base: <span class="term-cyan">${data.base}</span> | Límite: <span class="term-amber">${data.limit}</span></div>
+<div>Desplazamiento solicitado: <span class="term-amber">${data.offset}</span> (&lt; límite ${data.limit} &check;)</div>
+<div>Dirección Física (Base + Offset): <strong class="term-green" style="font-size:1.1em;">${data.physical_address}</strong></div>
+      `);
+    } catch (err) {
+      this.appendEntry(rawCmd, `<span class="term-rose">Error al consultar segmentación: ${this.escapeHtml(err.message)}</span>`);
+    }
+  }
+
+  async handleReplaceCommand(rawCmd, args) {
+    const frames = args[0] || '3';
+    try {
+      const res = await fetch(`/api/v1/memory/replace?frames=${encodeURIComponent(frames)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        this.appendEntry(rawCmd, `<span class="term-rose">Error en reemplazo de páginas: ${this.escapeHtml(data.error || '')}</span>`);
+        return;
+      }
+      const b = data.belady_anomaly;
+      this.appendEntry(rawCmd, `
+<div class="term-green term-bold">[Reemplazo de Páginas - Algoritmos M3]</div>
+<div>Patrón de Referencias: <span class="term-cyan">[${data.references.join(', ')}]</span> | Marcos: <span class="term-amber">${data.frames}</span></div>
+<table class="term-table">
+  <thead>
+    <tr><th>Algoritmo</th><th>Fallos de Página</th><th>Aciertos</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>FIFO (${frames} marcos)</td><td><span class="term-rose">${data.fifo.faults}</span></td><td>${data.fifo.hits}</td></tr>
+    <tr><td>LRU (${frames} marcos)</td><td><span class="term-amber">${data.lru.faults}</span></td><td>${data.lru.hits}</td></tr>
+    <tr><td>Óptimo (${frames} marcos)</td><td><span class="term-green">${data.optimal.faults}</span></td><td>${data.optimal.hits}</td></tr>
+  </tbody>
+</table>
+<div class="term-cyan" style="margin-top:4px;">
+  <strong>Anomalía de Belády:</strong> FIFO (3 marcos) = <span class="term-green">${b.fifo_3_frames_faults} fallos</span> vs FIFO (4 marcos) = <span class="term-rose">${b.fifo_4_frames_faults} fallos</span>.
+  <br><span class="term-gray">${b.note}</span>
+</div>
+      `);
+    } catch (err) {
+      this.appendEntry(rawCmd, `<span class="term-rose">Error al consultar reemplazo: ${this.escapeHtml(err.message)}</span>`);
+    }
+  }
+
+  async handleSyncCommand(rawCmd, args) {
+    const sub = (args[0] || 'status').toLowerCase();
+    try {
+      let url = '/api/v1/sync/status';
+      if (sub === 'step') {
+        url = '/api/v1/sync/step?actor=philosopher';
+      } else if (sub === 'deadlock') {
+        url = '/api/v1/sync/step?mode=deadlock';
+      } else if (sub === 'preventive' || sub === 'preventiva') {
+        url = '/api/v1/sync/step?mode=preventiva';
+      } else if (sub === 'produce') {
+        url = '/api/v1/sync/step?action=produce';
+      } else if (sub === 'consume') {
+        url = '/api/v1/sync/step?action=consume';
+      }
+
+      const res = await fetch(url);
+      const data = await res.json();
+      const ph = data.philosophers;
+      const pc = data.prod_cons;
+
+      this.appendEntry(rawCmd, `
+<div class="term-green term-bold">[Sincronización Go - Concurrencia M2]</div>
+<div><strong>Filósofos:</strong> Modo: <span class="term-cyan">${ph.mode}</span> | Deadlock RAG: ${ph.deadlock ? '<span class="term-rose term-bold">SÍ (Ciclo: [' + ph.cycle.join(', ') + '])</span>' : '<span class="term-green">NO</span>'}</div>
+<div>Estados: [${ph.states.join(', ')}] | Platos: ${Array.isArray(ph.eat_count) ? ph.eat_count.join(', ') : ph.eat_count}</div>
+<div style="margin-top:4px;"><strong>Buffer Productor-Consumidor:</strong> Ocupación: <span class="term-cyan">${pc.buffer_len}/${pc.capacity}</span> | Items: [${pc.items.join(', ')}]</div>
+<div>Semáforos: mutex=<span class="term-green">${pc.semaphores.mutex}</span>, vacios=<span class="term-cyan">${pc.semaphores.vacios}</span>, llenos=<span class="term-amber">${pc.semaphores.llenos}</span></div>
+      `);
+
+      if (window.osManager) {
+        window.osManager.openWindow('win-sync');
+      }
+      if (window.syncManager) {
+        window.syncManager.philoMode = ph.mode;
+        window.syncManager.philoStates = ph.states;
+        window.syncManager.forksOwner = ph.forks_owner;
+        window.syncManager.renderPhilosophers();
+
+        window.syncManager.buffer = pc.items;
+        window.syncManager.mutex = pc.semaphores.mutex;
+        window.syncManager.empty = pc.semaphores.vacios;
+        window.syncManager.full = pc.semaphores.llenos;
+        window.syncManager.renderProdCons();
+      }
+    } catch (err) {
+      this.appendEntry(rawCmd, `<span class="term-rose">Error sync: ${this.escapeHtml(err.message)}</span>`);
+    }
+  }
       window.osManager.refreshProcessesTable();
     }
   }
