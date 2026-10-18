@@ -31,20 +31,56 @@ int load_processes_from_json(const char *filepath, Process *out_procs, int max_p
     FILE *fp = fopen(filepath, "r");
     if (!fp) return -1;
 
-    char line[512];
+    char line[4096];
+    size_t used = 0;
+    int ch;
+    bool in_object = false, in_string = false, escaped = false;
     int count = 0;
-    while (fgets(line, sizeof(line), fp) && count < max_procs) {
+    while ((ch = fgetc(fp)) != EOF) {
+        if (!in_object) {
+            if (ch != '{') continue;
+            in_object = true;
+            used = 0;
+        }
+        if (used + 1 >= sizeof(line)) {
+            fclose(fp);
+            return -1;
+        }
+        line[used++] = (char)ch;
+        if (in_string) {
+            if (escaped) escaped = false;
+            else if (ch == '\\') escaped = true;
+            else if (ch == '"') in_string = false;
+            continue;
+        }
+        if (ch == '"') in_string = true;
+        if (ch != '}') continue;
+        line[used] = '\0';
+        in_object = false;
         if (strstr(line, "\"pid\"")) {
+            if (count >= max_procs) {
+                fclose(fp);
+                return -1;
+            }
             Process p;
             memset(&p, 0, sizeof(Process));
             p.priority = 1;
             p.memory_kb = 64;
+            extract_str_field(line, "\"nombre\"", p.name, sizeof(p.name));
+            extract_int_field(line, "\"llegada\"", &p.arrival_time);
+            extract_int_field(line, "\"rafaga\"", &p.burst_time);
+            extract_int_field(line, "\"prioridad\"", &p.priority);
+            extract_int_field(line, "\"memoria\"", &p.memory_kb);
             extract_int_field(line, "\"pid\"", &p.pid);
             extract_str_field(line, "\"name\"", p.name, sizeof(p.name));
             extract_int_field(line, "\"arrival_time\"", &p.arrival_time);
             extract_int_field(line, "\"burst_time\"", &p.burst_time);
             extract_int_field(line, "\"priority\"", &p.priority);
             extract_int_field(line, "\"memory_kb\"", &p.memory_kb);
+            if (p.arrival_time < 0 || p.burst_time <= 0) {
+                fclose(fp);
+                return -1;
+            }
             p.remaining_time = p.burst_time;
             p.effective_priority = p.priority;
             if (p.name[0] == '\0') {
@@ -54,12 +90,21 @@ int load_processes_from_json(const char *filepath, Process *out_procs, int max_p
         }
     }
     fclose(fp);
-    return count;
+    return in_object ? -1 : count;
 }
 
 static void write_schedule_stream(FILE *fp, const ScheduleResult *res) {
     fprintf(fp, "{\n");
     fprintf(fp, "  \"algorithm\": \"%s\",\n", res->algorithm);
+    int total_time = 0;
+    for (int i = 0; i < res->process_count; i++) {
+        if (res->processes[i].completion_time > total_time)
+            total_time = res->processes[i].completion_time;
+    }
+    fprintf(fp, "  \"total_time\": %d,\n", total_time);
+    fprintf(fp, "  \"average_waiting_time\": %.2f,\n", res->avg_waiting_time);
+    fprintf(fp, "  \"average_turnaround_time\": %.2f,\n", res->avg_turnaround_time);
+    fprintf(fp, "  \"average_response_time\": %.2f,\n", res->avg_response_time);
     if (res->quantum > 0) {
         fprintf(fp, "  \"quantum\": %d,\n", res->quantum);
     }
@@ -69,8 +114,8 @@ static void write_schedule_stream(FILE *fp, const ScheduleResult *res) {
     fprintf(fp, "  \"timeline\": [\n");
     for (int i = 0; i < res->segment_count; i++) {
         const TimelineSegment *s = &res->segments[i];
-        fprintf(fp, "    {\"pid\": %d, \"name\": \"%s\", \"start\": %d, \"end\": %d}%s\n",
-                s->pid, s->name, s->start_time, s->end_time,
+        fprintf(fp, "    {\"pid\": %d, \"name\": \"%s\", \"start\": %d, \"end\": %d, \"duration\": %d}%s\n",
+                s->pid, s->name, s->start_time, s->end_time, s->end_time - s->start_time,
                 (i + 1 < res->segment_count) ? "," : "");
     }
     fprintf(fp, "  ],\n");
@@ -79,9 +124,11 @@ static void write_schedule_stream(FILE *fp, const ScheduleResult *res) {
         const Process *p = &res->processes[i];
         fprintf(fp,
                 "    {\"pid\": %d, \"name\": \"%s\", \"arrival_time\": %d, \"burst_time\": %d, "
+                "\"arrival\": %d, \"burst\": %d, \"memory_kb\": %d, "
                 "\"priority\": %d, \"start_time\": %d, \"completion_time\": %d, "
                 "\"waiting_time\": %d, \"turnaround_time\": %d, \"response_time\": %d}%s\n",
-                p->pid, p->name, p->arrival_time, p->burst_time, p->priority,
+                p->pid, p->name, p->arrival_time, p->burst_time,
+                p->arrival_time, p->burst_time, p->memory_kb, p->priority,
                 p->start_time, p->completion_time, p->waiting_time,
                 p->turnaround_time, p->response_time,
                 (i + 1 < res->process_count) ? "," : "");
@@ -140,9 +187,9 @@ int main(int argc, char *argv[]) {
         schedule_fcfs(procs, n, &result);
     } else if (strcmp(algo, "SJF") == 0) {
         schedule_sjf(procs, n, &result);
-    } else if (strcmp(algo, "RR") == 0) {
+    } else if (strcmp(algo, "RR") == 0 || strcmp(algo, "ROUNDROBIN") == 0) {
         schedule_rr(procs, n, quantum, &result);
-    } else if (strcmp(algo, "PRIORITY") == 0) {
+    } else if (strcmp(algo, "PRIORITY") == 0 || strcmp(algo, "PRIORIDAD") == 0) {
         schedule_priority_nonpreemptive(procs, n, &result);
     } else if (strcmp(algo, "PRIORITY_PREEMPTIVE") == 0) {
         schedule_priority_preemptive(procs, n, aging, &result);

@@ -1,0 +1,7 @@
+{
+  "referencias": [1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5],
+  "anomalia_belady_fifo": {
+    "marcos_3": { "fallos_esperados": 9 },
+    "marcos_4": { "fallos_esperados": 10 }
+  }
+}
