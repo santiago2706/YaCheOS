@@ -1,467 +1,204 @@
 #include "pcb.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-// Parse simple integer from JSON string key
-static int parse_json_int(const char *json, const char *key, int default_val) {
-    char search[64];
-    snprintf(search, sizeof(search), "\"%s\":", key);
-    char *pos = strstr(json, search);
-    if (!pos) {
-        snprintf(search, sizeof(search), "\"%s\" :", key);
-        pos = strstr(json, search);
-    }
-    if (!pos) return default_val;
-    pos += strlen(search);
-    while (*pos == ' ' || *pos == '\t') pos++;
-    return atoi(pos);
+static void extract_int_field(const char *line, const char *key, int *out_val) {
+    const char *pos = strstr(line, key);
+    if (!pos) return;
+    pos = strchr(pos, ':');
+    if (!pos) return;
+    *out_val = atoi(pos + 1);
 }
 
-// Parse string from JSON key
-static void parse_json_str(const char *json, const char *key, char *out, size_t out_size, const char *default_val) {
-    char search[64];
-    snprintf(search, sizeof(search), "\"%s\":", key);
-    char *pos = strstr(json, search);
-    if (!pos) {
-        snprintf(search, sizeof(search), "\"%s\" :", key);
-        pos = strstr(json, search);
-    }
-    if (!pos) {
-        strncpy(out, default_val, out_size - 1);
-        out[out_size - 1] = '\0';
-        return;
-    }
-    pos += strlen(search);
-    while (*pos == ' ' || *pos == '\t' || *pos == '"') pos++;
-    size_t i = 0;
-    while (*pos && *pos != '"' && *pos != ',' && *pos != '}' && i < out_size - 1) {
-        out[i++] = *pos++;
-    }
-    out[i] = '\0';
+static void extract_str_field(const char *line, const char *key, char *out_str, size_t max_len) {
+    const char *pos = strstr(line, key);
+    if (!pos) return;
+    pos = strchr(pos, ':');
+    if (!pos) return;
+    pos = strchr(pos, '"');
+    if (!pos) return;
+    pos++;
+    const char *end = strchr(pos, '"');
+    if (!end) return;
+    size_t len = (size_t)(end - pos);
+    if (len >= max_len) len = max_len - 1;
+    memcpy(out_str, pos, len);
+    out_str[len] = '\0';
 }
 
-static int load_processes(const char *filename, Process procs[], int max_procs) {
-    FILE *f = fopen(filename, "r");
-    if (!f) {
-        // Fallback default processes if file cannot be opened (Semana 4 case)
-        procs[0] = (Process){ .pid = 1, .arrival_time = 0, .burst_time = 5, .remaining_time = 5, .priority = 3, .memory_kb = 128 };
-        strncpy(procs[0].name, "P1", sizeof(procs[0].name));
-        procs[1] = (Process){ .pid = 2, .arrival_time = 1, .burst_time = 3, .remaining_time = 3, .priority = 4, .memory_kb = 64 };
-        strncpy(procs[1].name, "P2", sizeof(procs[1].name));
-        procs[2] = (Process){ .pid = 3, .arrival_time = 2, .burst_time = 8, .remaining_time = 8, .priority = 1, .memory_kb = 256 };
-        strncpy(procs[2].name, "P3", sizeof(procs[2].name));
-        procs[3] = (Process){ .pid = 4, .arrival_time = 3, .burst_time = 6, .remaining_time = 6, .priority = 2, .memory_kb = 128 };
-        strncpy(procs[3].name, "P4", sizeof(procs[3].name));
-        return 4;
-    }
+int load_processes_from_json(const char *filepath, Process *out_procs, int max_procs) {
+    FILE *fp = fopen(filepath, "r");
+    if (!fp) return -1;
 
-    char buffer[16384];
-    size_t read_bytes = fread(buffer, 1, sizeof(buffer) - 1, f);
-    buffer[read_bytes] = '\0';
-    fclose(f);
-
+    char line[4096];
+    size_t used = 0;
+    int ch;
+    bool in_object = false, in_string = false, escaped = false;
     int count = 0;
-    char *cursor = buffer;
-    while ((cursor = strchr(cursor, '{')) != NULL && count < max_procs) {
-        char *end = strchr(cursor, '}');
-        if (!end) break;
-        char obj[1024];
-        size_t len = (size_t)(end - cursor + 1);
-        if (len >= sizeof(obj)) len = sizeof(obj) - 1;
-        strncpy(obj, cursor, len);
-        obj[len] = '\0';
-
-        procs[count].pid = parse_json_int(obj, "pid", count + 1);
-        parse_json_str(obj, "name", procs[count].name, sizeof(procs[count].name), "Px");
-        if (strlen(procs[count].name) == 0) {
-            parse_json_str(obj, "nombre", procs[count].name, sizeof(procs[count].name), "Px");
+    while ((ch = fgetc(fp)) != EOF) {
+        if (!in_object) {
+            if (ch != '{') continue;
+            in_object = true;
+            used = 0;
         }
-        procs[count].arrival_time = parse_json_int(obj, "arrival_time", parse_json_int(obj, "llegada", 0));
-        procs[count].burst_time = parse_json_int(obj, "burst_time", parse_json_int(obj, "rafaga", 1));
-        procs[count].remaining_time = procs[count].burst_time;
-        procs[count].priority = parse_json_int(obj, "priority", parse_json_int(obj, "prioridad", 0));
-        procs[count].memory_kb = parse_json_int(obj, "memory_kb", parse_json_int(obj, "memoria", 128));
-        procs[count].state = STATE_READY;
-        procs[count].start_time = -1;
-        procs[count].finish_time = -1;
-        procs[count].waiting_time = 0;
-        procs[count].turnaround_time = 0;
-        procs[count].response_time = -1;
-
-        count++;
-        cursor = end + 1;
-    }
-
-    if (count == 0) {
-        // Fallback default processes
-        procs[0] = (Process){ .pid = 1, .arrival_time = 0, .burst_time = 5, .remaining_time = 5, .priority = 3, .memory_kb = 128 };
-        strncpy(procs[0].name, "P1", sizeof(procs[0].name));
-        procs[1] = (Process){ .pid = 2, .arrival_time = 1, .burst_time = 3, .remaining_time = 3, .priority = 4, .memory_kb = 64 };
-        strncpy(procs[1].name, "P2", sizeof(procs[1].name));
-        procs[2] = (Process){ .pid = 3, .arrival_time = 2, .burst_time = 8, .remaining_time = 8, .priority = 1, .memory_kb = 256 };
-        strncpy(procs[2].name, "P3", sizeof(procs[2].name));
-        procs[3] = (Process){ .pid = 4, .arrival_time = 3, .burst_time = 6, .remaining_time = 6, .priority = 2, .memory_kb = 128 };
-        strncpy(procs[3].name, "P4", sizeof(procs[3].name));
-        return 4;
-    }
-    return count;
-}
-
-// FCFS Algorithm
-static void run_fcfs(Process procs[], int n, TimelineSegment timeline[], int *timeline_count) {
-    int current_time = 0;
-    int completed = 0;
-    bool done[32] = {false};
-    *timeline_count = 0;
-
-    while (completed < n) {
-        int best_idx = -1;
-        int min_arrival = 100000;
-        for (int i = 0; i < n; i++) {
-            if (!done[i] && procs[i].arrival_time <= current_time) {
-                if (procs[i].arrival_time < min_arrival) {
-                    min_arrival = procs[i].arrival_time;
-                    best_idx = i;
-                } else if (procs[i].arrival_time == min_arrival && best_idx >= 0 && procs[i].pid < procs[best_idx].pid) {
-                    best_idx = i;
-                }
-            }
+        if (used + 1 >= sizeof(line)) {
+            fclose(fp);
+            return -1;
         }
-
-        if (best_idx == -1) {
-            // Find next arriving process
-            int next_arr = 100000;
-            for (int i = 0; i < n; i++) {
-                if (!done[i] && procs[i].arrival_time < next_arr) {
-                    next_arr = procs[i].arrival_time;
-                }
-            }
-            if (next_arr == 100000) break;
-            current_time = next_arr;
+        line[used++] = (char)ch;
+        if (in_string) {
+            if (escaped) escaped = false;
+            else if (ch == '\\') escaped = true;
+            else if (ch == '"') in_string = false;
             continue;
         }
-
-        int start = current_time;
-        int duration = procs[best_idx].burst_time;
-        int end = start + duration;
-
-        procs[best_idx].start_time = start;
-        procs[best_idx].finish_time = end;
-        procs[best_idx].response_time = start - procs[best_idx].arrival_time;
-        procs[best_idx].turnaround_time = end - procs[best_idx].arrival_time;
-        procs[best_idx].waiting_time = procs[best_idx].turnaround_time - procs[best_idx].burst_time;
-        procs[best_idx].state = STATE_TERMINATED;
-
-        timeline[*timeline_count] = (TimelineSegment){
-            .pid = procs[best_idx].pid,
-            .start = start,
-            .end = end,
-            .duration = duration
-        };
-        strncpy(timeline[*timeline_count].name, procs[best_idx].name, sizeof(timeline[*timeline_count].name));
-        (*timeline_count)++;
-
-        done[best_idx] = true;
-        completed++;
-        current_time = end;
+        if (ch == '"') in_string = true;
+        if (ch != '}') continue;
+        line[used] = '\0';
+        in_object = false;
+        if (strstr(line, "\"pid\"")) {
+            if (count >= max_procs) {
+                fclose(fp);
+                return -1;
+            }
+            Process p;
+            memset(&p, 0, sizeof(Process));
+            p.priority = 1;
+            p.memory_kb = 64;
+            extract_str_field(line, "\"nombre\"", p.name, sizeof(p.name));
+            extract_int_field(line, "\"llegada\"", &p.arrival_time);
+            extract_int_field(line, "\"rafaga\"", &p.burst_time);
+            extract_int_field(line, "\"prioridad\"", &p.priority);
+            extract_int_field(line, "\"memoria\"", &p.memory_kb);
+            extract_int_field(line, "\"pid\"", &p.pid);
+            extract_str_field(line, "\"name\"", p.name, sizeof(p.name));
+            extract_int_field(line, "\"arrival_time\"", &p.arrival_time);
+            extract_int_field(line, "\"burst_time\"", &p.burst_time);
+            extract_int_field(line, "\"priority\"", &p.priority);
+            extract_int_field(line, "\"memory_kb\"", &p.memory_kb);
+            if (p.arrival_time < 0 || p.burst_time <= 0) {
+                fclose(fp);
+                return -1;
+            }
+            p.remaining_time = p.burst_time;
+            p.effective_priority = p.priority;
+            if (p.name[0] == '\0') {
+                snprintf(p.name, sizeof(p.name), "P%d", p.pid);
+            }
+            out_procs[count++] = p;
+        }
     }
+    fclose(fp);
+    return in_object ? -1 : count;
 }
 
-// SJF (Non-preemptive)
-static void run_sjf(Process procs[], int n, TimelineSegment timeline[], int *timeline_count) {
-    int current_time = 0;
-    int completed = 0;
-    bool done[32] = {false};
-    *timeline_count = 0;
-
-    while (completed < n) {
-        int best_idx = -1;
-        int min_burst = 100000;
-        for (int i = 0; i < n; i++) {
-            if (!done[i] && procs[i].arrival_time <= current_time) {
-                if (procs[i].burst_time < min_burst) {
-                    min_burst = procs[i].burst_time;
-                    best_idx = i;
-                } else if (procs[i].burst_time == min_burst && best_idx >= 0) {
-                    if (procs[i].arrival_time < procs[best_idx].arrival_time) {
-                        best_idx = i;
-                    } else if (procs[i].arrival_time == procs[best_idx].arrival_time && procs[i].pid < procs[best_idx].pid) {
-                        best_idx = i;
-                    }
-                }
-            }
-        }
-
-        if (best_idx == -1) {
-            int next_arr = 100000;
-            for (int i = 0; i < n; i++) {
-                if (!done[i] && procs[i].arrival_time < next_arr) {
-                    next_arr = procs[i].arrival_time;
-                }
-            }
-            if (next_arr == 100000) break;
-            current_time = next_arr;
-            continue;
-        }
-
-        int start = current_time;
-        int duration = procs[best_idx].burst_time;
-        int end = start + duration;
-
-        procs[best_idx].start_time = start;
-        procs[best_idx].finish_time = end;
-        procs[best_idx].response_time = start - procs[best_idx].arrival_time;
-        procs[best_idx].turnaround_time = end - procs[best_idx].arrival_time;
-        procs[best_idx].waiting_time = procs[best_idx].turnaround_time - procs[best_idx].burst_time;
-        procs[best_idx].state = STATE_TERMINATED;
-
-        timeline[*timeline_count] = (TimelineSegment){
-            .pid = procs[best_idx].pid,
-            .start = start,
-            .end = end,
-            .duration = duration
-        };
-        strncpy(timeline[*timeline_count].name, procs[best_idx].name, sizeof(timeline[*timeline_count].name));
-        (*timeline_count)++;
-
-        done[best_idx] = true;
-        completed++;
-        current_time = end;
+static void write_schedule_stream(FILE *fp, const ScheduleResult *res) {
+    fprintf(fp, "{\n");
+    fprintf(fp, "  \"algorithm\": \"%s\",\n", res->algorithm);
+    int total_time = 0;
+    for (int i = 0; i < res->process_count; i++) {
+        if (res->processes[i].completion_time > total_time)
+            total_time = res->processes[i].completion_time;
     }
+    fprintf(fp, "  \"total_time\": %d,\n", total_time);
+    fprintf(fp, "  \"average_waiting_time\": %.2f,\n", res->avg_waiting_time);
+    fprintf(fp, "  \"average_turnaround_time\": %.2f,\n", res->avg_turnaround_time);
+    fprintf(fp, "  \"average_response_time\": %.2f,\n", res->avg_response_time);
+    if (res->quantum > 0) {
+        fprintf(fp, "  \"quantum\": %d,\n", res->quantum);
+    }
+    if (res->aging_interval > 0) {
+        fprintf(fp, "  \"aging_interval\": %d,\n", res->aging_interval);
+    }
+    fprintf(fp, "  \"timeline\": [\n");
+    for (int i = 0; i < res->segment_count; i++) {
+        const TimelineSegment *s = &res->segments[i];
+        fprintf(fp, "    {\"pid\": %d, \"name\": \"%s\", \"start\": %d, \"end\": %d, \"duration\": %d}%s\n",
+                s->pid, s->name, s->start_time, s->end_time, s->end_time - s->start_time,
+                (i + 1 < res->segment_count) ? "," : "");
+    }
+    fprintf(fp, "  ],\n");
+    fprintf(fp, "  \"processes\": [\n");
+    for (int i = 0; i < res->process_count; i++) {
+        const Process *p = &res->processes[i];
+        fprintf(fp,
+                "    {\"pid\": %d, \"name\": \"%s\", \"arrival_time\": %d, \"burst_time\": %d, "
+                "\"arrival\": %d, \"burst\": %d, \"memory_kb\": %d, "
+                "\"priority\": %d, \"start_time\": %d, \"completion_time\": %d, "
+                "\"waiting_time\": %d, \"turnaround_time\": %d, \"response_time\": %d}%s\n",
+                p->pid, p->name, p->arrival_time, p->burst_time,
+                p->arrival_time, p->burst_time, p->memory_kb, p->priority,
+                p->start_time, p->completion_time, p->waiting_time,
+                p->turnaround_time, p->response_time,
+                (i + 1 < res->process_count) ? "," : "");
+    }
+    fprintf(fp, "  ],\n");
+    fprintf(fp, "  \"metrics\": {\n");
+    fprintf(fp, "    \"avg_waiting_time\": %.2f,\n", res->avg_waiting_time);
+    fprintf(fp, "    \"avg_turnaround_time\": %.2f,\n", res->avg_turnaround_time);
+    fprintf(fp, "    \"avg_response_time\": %.2f\n", res->avg_response_time);
+    fprintf(fp, "  }\n");
+    fprintf(fp, "}\n");
 }
 
-// Priority (Non-preemptive, lower number = higher priority)
-static void run_priority(Process procs[], int n, TimelineSegment timeline[], int *timeline_count) {
-    int current_time = 0;
-    int completed = 0;
-    bool done[32] = {false};
-    *timeline_count = 0;
-
-    while (completed < n) {
-        int best_idx = -1;
-        int best_prio = 100000;
-        for (int i = 0; i < n; i++) {
-            if (!done[i] && procs[i].arrival_time <= current_time) {
-                if (procs[i].priority < best_prio) {
-                    best_prio = procs[i].priority;
-                    best_idx = i;
-                } else if (procs[i].priority == best_prio && best_idx >= 0) {
-                    if (procs[i].arrival_time < procs[best_idx].arrival_time) {
-                        best_idx = i;
-                    } else if (procs[i].arrival_time == procs[best_idx].arrival_time && procs[i].pid < procs[best_idx].pid) {
-                        best_idx = i;
-                    }
-                }
-            }
-        }
-
-        if (best_idx == -1) {
-            int next_arr = 100000;
-            for (int i = 0; i < n; i++) {
-                if (!done[i] && procs[i].arrival_time < next_arr) {
-                    next_arr = procs[i].arrival_time;
-                }
-            }
-            if (next_arr == 100000) break;
-            current_time = next_arr;
-            continue;
-        }
-
-        int start = current_time;
-        int duration = procs[best_idx].burst_time;
-        int end = start + duration;
-
-        procs[best_idx].start_time = start;
-        procs[best_idx].finish_time = end;
-        procs[best_idx].response_time = start - procs[best_idx].arrival_time;
-        procs[best_idx].turnaround_time = end - procs[best_idx].arrival_time;
-        procs[best_idx].waiting_time = procs[best_idx].turnaround_time - procs[best_idx].burst_time;
-        procs[best_idx].state = STATE_TERMINATED;
-
-        timeline[*timeline_count] = (TimelineSegment){
-            .pid = procs[best_idx].pid,
-            .start = start,
-            .end = end,
-            .duration = duration
-        };
-        strncpy(timeline[*timeline_count].name, procs[best_idx].name, sizeof(timeline[*timeline_count].name));
-        (*timeline_count)++;
-
-        done[best_idx] = true;
-        completed++;
-        current_time = end;
-    }
-}
-
-// Round Robin (Quantum = 4)
-static void run_rr(Process procs[], int n, int quantum, TimelineSegment timeline[], int *timeline_count) {
-    int queue[512];
-    int q_head = 0, q_tail = 0;
-    bool in_queue[32] = {false};
-    bool visited[32] = {false};
-    int current_time = 0;
-    int completed = 0;
-    *timeline_count = 0;
-
-    // Initial arrivals at t=0
-    for (int i = 0; i < n; i++) {
-        if (procs[i].arrival_time <= current_time && !in_queue[i]) {
-            queue[q_tail++] = i;
-            in_queue[i] = true;
-        }
-    }
-
-    while (completed < n) {
-        if (q_head == q_tail) {
-            // Find next arrival
-            int next_arr = 100000;
-            for (int i = 0; i < n; i++) {
-                if (procs[i].remaining_time > 0 && procs[i].arrival_time < next_arr) {
-                    next_arr = procs[i].arrival_time;
-                }
-            }
-            if (next_arr == 100000) break;
-            current_time = next_arr;
-            for (int i = 0; i < n; i++) {
-                if (procs[i].remaining_time > 0 && procs[i].arrival_time <= current_time && !in_queue[i]) {
-                    queue[q_tail++] = i;
-                    in_queue[i] = true;
-                }
-            }
-            continue;
-        }
-
-        int idx = queue[q_head++];
-        in_queue[idx] = false;
-
-        if (!visited[idx]) {
-            procs[idx].start_time = current_time;
-            procs[idx].response_time = current_time - procs[idx].arrival_time;
-            visited[idx] = true;
-        }
-
-        int slice = (procs[idx].remaining_time < quantum) ? procs[idx].remaining_time : quantum;
-        int start = current_time;
-        int end = current_time + slice;
-        procs[idx].remaining_time -= slice;
-        current_time = end;
-
-        timeline[*timeline_count] = (TimelineSegment){
-            .pid = procs[idx].pid,
-            .start = start,
-            .end = end,
-            .duration = slice
-        };
-        strncpy(timeline[*timeline_count].name, procs[idx].name, sizeof(timeline[*timeline_count].name));
-        (*timeline_count)++;
-
-        // Enqueue new arrivals during this execution slice before re-enqueueing current process
-        for (int i = 0; i < n; i++) {
-            if (i != idx && procs[i].remaining_time > 0 && procs[i].arrival_time <= current_time && !in_queue[i]) {
-                bool already_done = false;
-                for (int k = q_head; k < q_tail; k++) {
-                    if (queue[k] == i) { already_done = true; break; }
-                }
-                if (!already_done) {
-                    queue[q_tail++] = i;
-                    in_queue[i] = true;
-                }
-            }
-        }
-
-        if (procs[idx].remaining_time > 0) {
-            queue[q_tail++] = idx;
-            in_queue[idx] = true;
-        } else {
-            procs[idx].finish_time = current_time;
-            procs[idx].turnaround_time = procs[idx].finish_time - procs[idx].arrival_time;
-            procs[idx].waiting_time = procs[idx].turnaround_time - procs[idx].burst_time;
-            procs[idx].state = STATE_TERMINATED;
-            completed++;
+void print_schedule_json(const ScheduleResult *res, const char *out_filepath) {
+    write_schedule_stream(stdout, res);
+    if (out_filepath && out_filepath[0] != '\0') {
+        FILE *fp = fopen(out_filepath, "w");
+        if (fp) {
+            write_schedule_stream(fp, res);
+            fclose(fp);
         }
     }
 }
 
+#ifndef CORE_ENGINE_UNIFIED
 int main(int argc, char *argv[]) {
-    char algo[32] = "FCFS";
-    char filename[256] = "data/procesos_semana4.json";
+    const char *algo = "FCFS";
+    const char *filepath = "data/procesos_semana4.json";
+    const char *outpath = "cpu_timeline.json";
     int quantum = 4;
+    int aging = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--algo") == 0 && i + 1 < argc) {
-            strncpy(algo, argv[++i], sizeof(algo) - 1);
+            algo = argv[++i];
         } else if (strcmp(argv[i], "--file") == 0 && i + 1 < argc) {
-            strncpy(filename, argv[++i], sizeof(filename) - 1);
+            filepath = argv[++i];
         } else if (strcmp(argv[i], "--quantum") == 0 && i + 1 < argc) {
             quantum = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--aging") == 0 && i + 1 < argc) {
+            aging = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
+            outpath = argv[++i];
         }
     }
 
-    // Convert algo to uppercase
-    for (int i = 0; algo[i]; i++) {
-        if (algo[i] >= 'a' && algo[i] <= 'z') algo[i] -= 32;
-    }
-
-    if (strcmp(algo, "FCFS") != 0 && strcmp(algo, "SJF") != 0 &&
-        strcmp(algo, "RR") != 0 && strcmp(algo, "ROUNDROBIN") != 0 &&
-        strcmp(algo, "PRIORIDAD") != 0 && strcmp(algo, "PRIORITY") != 0) {
-        fprintf(stderr, "Error: Algoritmo no valido '%s'. Algoritmos permitidos: FCFS, SJF, RR, PRIORIDAD.\n", algo);
-        return 1;
-    }
-
-    Process procs[32];
-    int n = load_processes(filename, procs, 32);
+    Process procs[MAX_PROCESSES];
+    int n = load_processes_from_json(filepath, procs, MAX_PROCESSES);
     if (n <= 0) {
-        fprintf(stderr, "Error: No se pudieron cargar procesos desde '%s'\n", filename);
-        return 2;
+        fprintf(stderr, "{\"error\": \"No se pudo cargar el archivo %s\"}\n", filepath);
+        return EXIT_FAILURE;
     }
 
-    TimelineSegment timeline[128];
-    int timeline_count = 0;
-
+    ScheduleResult result;
     if (strcmp(algo, "FCFS") == 0) {
-        run_fcfs(procs, n, timeline, &timeline_count);
+        schedule_fcfs(procs, n, &result);
     } else if (strcmp(algo, "SJF") == 0) {
-        run_sjf(procs, n, timeline, &timeline_count);
+        schedule_sjf(procs, n, &result);
     } else if (strcmp(algo, "RR") == 0 || strcmp(algo, "ROUNDROBIN") == 0) {
-        run_rr(procs, n, quantum, timeline, &timeline_count);
-    } else if (strcmp(algo, "PRIORIDAD") == 0 || strcmp(algo, "PRIORITY") == 0) {
-        run_priority(procs, n, timeline, &timeline_count);
+        schedule_rr(procs, n, quantum, &result);
+    } else if (strcmp(algo, "PRIORITY") == 0 || strcmp(algo, "PRIORIDAD") == 0) {
+        schedule_priority_nonpreemptive(procs, n, &result);
+    } else if (strcmp(algo, "PRIORITY_PREEMPTIVE") == 0) {
+        schedule_priority_preemptive(procs, n, aging, &result);
+    } else {
+        fprintf(stderr, "{\"error\": \"Algoritmo no soportado: %s\"}\n", algo);
+        return EXIT_FAILURE;
     }
 
-    double total_wait = 0, total_turn = 0, total_resp = 0;
-    int max_time = 0;
-    for (int i = 0; i < n; i++) {
-        total_wait += procs[i].waiting_time;
-        total_turn += procs[i].turnaround_time;
-        total_resp += procs[i].response_time;
-        if (procs[i].finish_time > max_time) max_time = procs[i].finish_time;
-    }
-    double avg_wait = total_wait / n;
-    double avg_turn = total_turn / n;
-    double avg_resp = total_resp / n;
-
-    // Print JSON output to stdout
-    printf("{\n");
-    printf("  \"algorithm\": \"%s\",\n", algo);
-    printf("  \"total_time\": %d,\n", max_time);
-    printf("  \"average_waiting_time\": %.2f,\n", avg_wait);
-    printf("  \"average_turnaround_time\": %.2f,\n", avg_turn);
-    printf("  \"average_response_time\": %.2f,\n", avg_resp);
-    printf("  \"timeline\": [\n");
-    for (int i = 0; i < timeline_count; i++) {
-        printf("    {\"pid\": %d, \"name\": \"%s\", \"start\": %d, \"end\": %d, \"duration\": %d}%s\n",
-               timeline[i].pid, timeline[i].name, timeline[i].start, timeline[i].end, timeline[i].duration,
-               (i == timeline_count - 1) ? "" : ",");
-    }
-    printf("  ],\n");
-    printf("  \"processes\": [\n");
-    for (int i = 0; i < n; i++) {
-        printf("    {\"pid\": %d, \"name\": \"%s\", \"arrival\": %d, \"burst\": %d, \"priority\": %d, \"memory_kb\": %d, \"waiting_time\": %d, \"turnaround_time\": %d, \"response_time\": %d}%s\n",
-               procs[i].pid, procs[i].name, procs[i].arrival_time, procs[i].burst_time, procs[i].priority, procs[i].memory_kb,
-               procs[i].waiting_time, procs[i].turnaround_time, procs[i].response_time,
-               (i == n - 1) ? "" : ",");
-    }
-    printf("  ]\n");
-    printf("}\n");
-
-    return 0;
+    print_schedule_json(&result, outpath);
+    return EXIT_SUCCESS;
 }
+#endif

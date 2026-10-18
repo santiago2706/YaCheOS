@@ -8,8 +8,14 @@ type DeadlockReport struct {
 
 // DetectRAGCycle evalúa si existe un ciclo en el Grafo de Asignación de Recursos para tenedores/procesos.
 func DetectRAGCycle(dp *DiningPhilosophers) DeadlockReport {
+	if dp == nil {
+		return DeadlockReport{Cycle: []int{}}
+	}
 	dp.Mu.Lock()
 	defer dp.Mu.Unlock()
+	if dp.Count <= 0 || len(dp.ForksOwner) != dp.Count || len(dp.States) != dp.Count {
+		return DeadlockReport{Cycle: []int{}}
+	}
 
 	// En el caso clásico de 5 filósofos, si cada filósofo i retiene el recurso i y espera el (i+1)%5, hay ciclo [1,2,3,4,5]
 	cycle := make([]int, 0)

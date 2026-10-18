@@ -36,6 +36,7 @@ func NewCoreHandlers(baseDir string) *CoreHandlers {
 func (h *CoreHandlers) findBinary(name string) string {
 	candidates := []string{
 		filepath.Join(h.baseDir, "bin", name),
+		filepath.Join(h.baseDir, "bin", name+".exe"),
 		filepath.Join(h.baseDir, "src", "core_c", name),
 		filepath.Join(h.baseDir, "src", "core_c", name+".exe"),
 	}
@@ -440,16 +441,16 @@ func (h *CoreHandlers) HandlePageReplacement(w http.ResponseWriter, r *http.Requ
 	fifo4, _ := simulateFIFO(pages, 4)
 
 	res := map[string]any{
-		"references":     pages,
-		"frames":         frames,
-		"fifo":           map[string]any{"faults": fifoFaults, "hits": fifoHits},
-		"lru":            map[string]any{"faults": lruFaults, "hits": lruHits},
-		"optimal":        map[string]any{"faults": optFaults, "hits": optHits},
+		"references": pages,
+		"frames":     frames,
+		"fifo":       map[string]any{"faults": fifoFaults, "hits": fifoHits},
+		"lru":        map[string]any{"faults": lruFaults, "hits": lruHits},
+		"optimal":    map[string]any{"faults": optFaults, "hits": optHits},
 		"belady_anomaly": map[string]any{
 			"fifo_3_frames_faults": fifo3,
 			"fifo_4_frames_faults": fifo4,
-			"anomaly_confirmed":   fifo4 > fifo3,
-			"note":                "En FIFO, al aumentar de 3 a 4 marcos los fallos suben de 9 a 10 (Anomalía de Belady).",
+			"anomaly_confirmed":    fifo4 > fifo3,
+			"note":                 "En FIFO, al aumentar de 3 a 4 marcos los fallos suben de 9 a 10 (Anomalía de Belady).",
 		},
 	}
 

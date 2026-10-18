@@ -99,6 +99,30 @@ func TestCPUScheduleEndpointFCFS(t *testing.T) {
 	}
 }
 
+// TestCPUScheduleCompactProcesses verifica los procesos enviados juntos en el body.
+func TestCPUScheduleCompactProcesses(t *testing.T) {
+	h := NewCoreHandlers(resolveBaseDir())
+	body := `{"algo":"FCFS","processes":[{"pid":1,"name":"A","arrival_time":0,"burst_time":3},{"pid":2,"name":"B","arrival_time":0,"burst_time":2}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/cpu/schedule", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	h.HandleCPUSchedule(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("schedule failed: %d %s", rr.Code, rr.Body.String())
+	}
+	var result struct {
+		Processes []struct {
+			PID int `json:"pid"`
+		} `json:"processes"`
+		AverageWaitingTime float64 `json:"average_waiting_time"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Processes) != 2 || result.Processes[1].PID != 2 || result.AverageWaitingTime != 1.5 {
+		t.Fatalf("compact JSON must schedule both processes: %+v", result)
+	}
+}
+
 // TestCPUScheduleLatencyUnder200ms verifica el DoD de T1.4 (< 200 ms).
 func TestCPUScheduleLatencyUnder200ms(t *testing.T) {
 	baseDir := resolveBaseDir()
