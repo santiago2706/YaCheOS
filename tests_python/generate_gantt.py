@@ -14,6 +14,62 @@ from ground_truth_semana4 import ALGORITHMS
 
 
 COLORS = ("#2563eb", "#db2777", "#059669", "#d97706", "#7c3aed", "#0891b2")
+ALGORITHM_ALIASES = {"PRIORITY_PREEMPTIVE_AGING": "PRIORITY_AGING"}
+
+
+def _canonical_algorithm(name):
+    return ALGORITHM_ALIASES.get(name, name)
+
+
+def _normalize_result(result):
+    """Acepta el JSON del motor C y el del oráculo sin modificar la entrada."""
+    if not isinstance(result, dict):
+        return result
+    normalized = dict(result)
+    normalized["algorithm"] = _canonical_algorithm(result.get("algorithm"))
+    processes = result.get("processes")
+    if isinstance(processes, list):
+        normalized_rows = []
+        for original in processes:
+            if not isinstance(original, dict):
+                normalized_rows.append(original)
+                continue
+            row = dict(original)
+            for canonical, c_name in (("first_start", "start_time"),
+                                      ("completion", "completion_time")):
+                if c_name in row:
+                    if canonical in row and row[canonical] != row[c_name]:
+                        raise ValueError(f"{canonical} no coincide con {c_name}")
+                    row[canonical] = row[c_name]
+            normalized_rows.append(row)
+        normalized["processes"] = normalized_rows
+
+    timeline = result.get("timeline")
+    if isinstance(timeline, list):
+        normalized_timeline = []
+        previous_end = 0
+        for block in timeline:
+            if isinstance(block, dict) and type(block.get("start")) is int and block["start"] > previous_end:
+                normalized_timeline.append({"pid": 0, "start": previous_end, "end": block["start"]})
+            normalized_timeline.append(block)
+            if isinstance(block, dict) and type(block.get("end")) is int:
+                previous_end = block["end"]
+        normalized["timeline"] = normalized_timeline
+
+    # El motor C imprime promedios con dos decimales. El gráfico muestra tres,
+    # calculados desde las métricas enteras por proceso y contrastados con C.
+    if "metrics" in result and isinstance(normalized.get("processes"), list) and normalized["processes"]:
+        rows = normalized["processes"]
+        for key in ("average_waiting_time", "average_turnaround_time", "average_response_time"):
+            process_key = key.removeprefix("average_")
+            reported = result.get(key)
+            if (type(reported) in (int, float) and
+                    all(isinstance(row, dict) and type(row.get(process_key)) is int for row in rows)):
+                exact = sum(row[process_key] for row in rows) / len(rows)
+                if (reported != round(exact, 3) and reported == round(reported, 2)
+                        and abs(reported - exact) <= 0.005000001):
+                    normalized[key] = round(exact, 3)
+    return normalized
 
 
 def _integer(value, label, minimum=0):
@@ -55,6 +111,8 @@ def _validate(result):
         end = _integer(block.get("end"), "timeline.end")
         if start != previous_end or end <= start:
             raise ValueError("El timeline debe ser continuo desde t=0 y tener bloques positivos")
+        if "duration" in block and block["duration"] != end - start:
+            raise ValueError("La duración del bloque no coincide con inicio y fin")
         if pid == 0:
             if any(row["arrival_time"] < end and row["completion"] > start
                    for row in rows.values()):
@@ -82,6 +140,10 @@ def _validate(result):
                 raise ValueError(f"P{pid}: {key}={row.get(key)!r}, esperado={value}")
     if previous_end != max(row["completion"] for row in rows.values()):
         raise ValueError("El timeline continúa tras finalizar todos los procesos")
+    if "total_time" in result and result["total_time"] != previous_end:
+        raise ValueError("total_time no coincide con la finalización")
+    if "metrics" in result and not isinstance(result["metrics"], dict):
+        raise ValueError("metrics debe ser un objeto JSON")
     for key in ("average_waiting_time", "average_turnaround_time", "average_response_time"):
         value = result.get(key)
         if type(value) not in (int, float) or value < 0:
@@ -90,6 +152,8 @@ def _validate(result):
         expected = round(sum(row[process_key] for row in rows.values()) / len(rows), 3)
         if value != expected:
             raise ValueError(f"{key}={value}, esperado={expected}")
+        if "metrics" in result and result["metrics"].get(key.replace("average_", "avg_")) not in (value, round(value, 2)):
+            raise ValueError(f"metrics.{key.replace('average_', 'avg_')} no coincide con {key}")
     return rows, previous_end
 
 
@@ -102,6 +166,7 @@ def _tick_step(duration):
 
 def render_svg(result):
     """Devuelve un SVG autocontenido; no necesita matplotlib ni recursos externos."""
+    result = _normalize_result(result)
     rows, duration = _validate(result)
     plot_width = min(1300, max(620, duration * 28))
     scale = plot_width / duration
@@ -180,13 +245,24 @@ def main(argv=None):
     try:
         with sys.stdin if args.input == "-" else open(args.input, encoding="utf-8") as source:
             payload = json.load(source)
-        results = {payload["algorithm"]: payload} if isinstance(payload, dict) and "algorithm" in payload else payload
+        if isinstance(payload, dict) and "algorithm" in payload:
+            results = {_canonical_algorithm(payload["algorithm"]): payload}
+        elif isinstance(payload, dict):
+            results = {}
+            for name, value in payload.items():
+                canonical = _canonical_algorithm(name)
+                if canonical in results:
+                    raise ValueError(f"Algoritmo duplicado: {canonical}")
+                results[canonical] = value
+        else:
+            results = payload
         if not isinstance(results, dict) or not results:
             raise ValueError("El JSON debe contener un resultado o un mapa de algoritmos")
         selected = args.algorithms or list(results)
         if any(name not in results or name not in ALGORITHMS for name in selected):
             raise ValueError("Algoritmo solicitado ausente en el JSON")
-        if any(not isinstance(results[name], dict) or results[name].get("algorithm") != name
+        if any(not isinstance(results[name], dict) or
+               _canonical_algorithm(results[name].get("algorithm")) != name
                for name in selected):
             raise ValueError("La clave del algoritmo no coincide con el resultado")
         rendered = {name: render_svg(results[name]) for name in selected}
