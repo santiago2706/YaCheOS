@@ -88,6 +88,19 @@ def test_aging_promotes_a_waiting_process():
     ]
 
 
+def test_aging_resets_partial_wait_after_process_runs():
+    cases = [process(1, 1, 4, 5), process(2, 7, 7, 4),
+             process(3, 0, 5, 2), process(4, 4, 5, 3)]
+    assert schedule(cases, "PRIORITY_AGING", aging_interval=3)["timeline"] == [
+        {"pid": 3, "start": 0, "end": 5},
+        {"pid": 4, "start": 5, "end": 7},
+        {"pid": 1, "start": 7, "end": 10},
+        {"pid": 4, "start": 10, "end": 13},
+        {"pid": 1, "start": 13, "end": 14},
+        {"pid": 2, "start": 14, "end": 21},
+    ]
+
+
 def test_cpu_input_requires_exact_integers():
     for value in (0, -1, 1.5, "1", True):
         process = {"pid": value, "arrival_time": 0, "burst_time": 1, "priority": 1}
