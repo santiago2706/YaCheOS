@@ -14,6 +14,7 @@ from test_scheduler import binary
 
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures/procesos_semana4.json"
+ROOT = Path(__file__).resolve().parents[1]
 SVG = "{http://www.w3.org/2000/svg}"
 
 
@@ -148,3 +149,15 @@ def test_cli_renders_actual_c_scheduler_json(binary, tmp_path, algorithm, aging,
     expected = schedule(processes, algorithm, aging_interval=aging or 4)
     assert actual == [(block["pid"], block["start"], block["end"])
                       for block in expected["timeline"]]
+
+
+@pytest.mark.parametrize("algorithm", ["FCFS", "SJF", "RR", "PRIORITY"])
+def test_documented_trace_and_svg_match_current_c_binary(binary, tmp_path, algorithm):
+    trace = ROOT / "docs/traces" / f"cpu_{algorithm.lower()}.json"
+    svg = ROOT / "docs/gantt" / f"gantt_{algorithm.lower()}.svg"
+    result = subprocess.run([str(binary), "--algo", algorithm, "--file", str(FIXTURE),
+                             "--quantum", "4", "--out", str(tmp_path / "cpu_timeline.json")],
+                            check=True, capture_output=True, text=True)
+    saved = json.loads(trace.read_text(encoding="utf-8"))
+    assert saved == json.loads(result.stdout), f"Traza desactualizada: {trace}"
+    assert svg.read_text(encoding="utf-8") == render_svg(saved), f"SVG desactualizado: {svg}"
