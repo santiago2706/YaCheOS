@@ -168,22 +168,11 @@ func (dp *DiningPhilosophers) StepPhilosopher(id int) {
 	}
 }
 
-// CheckDeadlock comprueba si todos los filósofos están bloqueados (espera circular activa).
+// CheckDeadlock comprueba si existe un interbloqueo utilizando un Grafo
+// de Asignación de Recursos (RAG). Se unifica para evitar resultados contradictorios.
 func (dp *DiningPhilosophers) CheckDeadlock() (bool, []int) {
-	dp.Mu.Lock()
-	defer dp.Mu.Unlock()
-
-	blocked := make([]int, 0)
-
-	for i := 0; i < dp.Count; i++ {
-		if dp.States[i] == StateDeadlocked {
-			blocked = append(blocked, i+1) // Guardamos ID basado en 1 para la UI si se requiere
-		}
-	}
-
-	if len(blocked) == dp.Count {
-		return true, blocked
-	}
-
-	return false, blocked
+	// Ya no bloqueamos el Mutex aquí.
+	// DetectRAGCycle se encarga de la exclusión mutua localmente.
+	report := DetectRAGCycle(dp)
+	return report.Deadlock, report.Cycle
 }
