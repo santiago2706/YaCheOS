@@ -1,4 +1,4 @@
-"""Diez casos de caja negra: compara el ejecutable C con el oráculo Python."""
+"""Casos de caja negra: compara el ejecutable C con el oráculo Python."""
 import json
 import os
 import shutil
@@ -159,3 +159,23 @@ def test_c_matches_oracle(binary, tmp_path, name, processes, algorithm, quantum,
         assert actual["average_waiting_time"] == expected_wait
     if name == "base_rr":
         assert actual["average_response_time"] == 4.0
+
+
+@pytest.mark.parametrize("processes", [
+    [{"pid": 1, "arrival_time": 0, "burst_time": 2, "priority": 1},
+     {"pid": 1, "arrival_time": 1, "burst_time": 1, "priority": 1}],
+    [{"pid": 0, "arrival_time": 0, "burst_time": 1, "priority": 1}],
+    [{"pid": -2, "arrival_time": 0, "burst_time": 1, "priority": 1}],
+    [{"pid": 1, "arrival_time": 0, "burst_time": 1, "priority": 0}],
+], ids=["pid_duplicado", "pid_cero", "pid_negativo", "prioridad_cero"])
+def test_c_rejects_invalid_processes_without_result(binary, tmp_path, processes):
+    source = tmp_path / "invalid.json"
+    output = tmp_path / "cpu_timeline.json"
+    source.write_text(json.dumps(processes), encoding="utf-8")
+    with pytest.raises(ValueError):
+        schedule(processes, "RR")
+    completed = subprocess.run([str(binary), "--algo", "RR", "--file", str(source),
+                                "--out", str(output)], capture_output=True, text=True)
+    assert completed.returncode != 0
+    assert not completed.stdout
+    assert not output.exists()
