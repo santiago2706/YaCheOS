@@ -38,6 +38,27 @@ static void finalize_metrics(ScheduleResult *out) {
     }
 }
 
+/* La cola RR debe reflejar el instante de llegada, no el orden del JSON. */
+static void enqueue_arrivals(Queue *ready, Process *processes, int n,
+                             int current_time, bool *in_queue) {
+    for (;;) {
+        int next = -1;
+        for (int i = 0; i < n; i++) {
+            Process *p = &processes[i];
+            if (in_queue[i] || p->state == STATE_TERMINATED ||
+                p->arrival_time > current_time) continue;
+            if (next == -1 || p->arrival_time < processes[next].arrival_time ||
+                (p->arrival_time == processes[next].arrival_time && p->pid < processes[next].pid)) {
+                next = i;
+            }
+        }
+        if (next == -1) break;
+        processes[next].state = STATE_READY;
+        queue_enqueue(ready, &processes[next]);
+        in_queue[next] = true;
+    }
+}
+
 void schedule_rr(const Process *input, int n, int quantum, ScheduleResult *out) {
     if (quantum <= 0) quantum = 4;
     memset(out, 0, sizeof(ScheduleResult));
@@ -59,26 +80,12 @@ void schedule_rr(const Process *input, int n, int quantum, ScheduleResult *out) 
     int current_time = 0;
     int completed = 0;
 
-    /* Encolar procesos que llegan en t = 0 ordenados por llegada y PID */
-    for (int i = 0; i < n; i++) {
-        if (out->processes[i].arrival_time <= current_time && !in_queue[i]) {
-            out->processes[i].state = STATE_READY;
-            queue_enqueue(&ready, &out->processes[i]);
-            in_queue[i] = true;
-        }
-    }
+    enqueue_arrivals(&ready, out->processes, n, current_time, in_queue);
 
     while (completed < n) {
         if (queue_is_empty(&ready)) {
             current_time++;
-            for (int i = 0; i < n; i++) {
-                if (!in_queue[i] && out->processes[i].state != STATE_TERMINATED &&
-                    out->processes[i].arrival_time <= current_time) {
-                    out->processes[i].state = STATE_READY;
-                    queue_enqueue(&ready, &out->processes[i]);
-                    in_queue[i] = true;
-                }
-            }
+            enqueue_arrivals(&ready, out->processes, n, current_time, in_queue);
             continue;
         }
 
@@ -95,14 +102,7 @@ void schedule_rr(const Process *input, int n, int quantum, ScheduleResult *out) 
         append_or_extend_segment(out, curr, start, current_time);
 
         /* Regla del contrato: encolar llegadas ocurridas hasta el final del quantum antes de reinsertar */
-        for (int i = 0; i < n; i++) {
-            if (!in_queue[i] && out->processes[i].state != STATE_TERMINATED &&
-                out->processes[i].arrival_time <= current_time) {
-                out->processes[i].state = STATE_READY;
-                queue_enqueue(&ready, &out->processes[i]);
-                in_queue[i] = true;
-            }
-        }
+        enqueue_arrivals(&ready, out->processes, n, current_time, in_queue);
 
         if (curr->remaining_time == 0) {
             curr->state = STATE_TERMINATED;

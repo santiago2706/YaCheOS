@@ -10,7 +10,8 @@ ALGORITHMS = ("FCFS", "SJF", "RR", "PRIORITY", "PRIORITY_PREEMPTIVE", "PRIORITY_
 
 def schedule(processes, algorithm, quantum=4, aging_interval=4):
     """Simula ticks enteros; aging baja la prioridad efectiva tras cada intervalo
-    acumulado en READY (mínimo 1). Los empates se resuelven por llegada y PID.
+    en READY (mínimo 1). La espera parcial se reinicia al ejecutar.
+    Los empates se resuelven por llegada y PID.
     """
     if (algorithm not in ALGORITHMS or type(quantum) is not int or type(aging_interval) is not int
             or not 1 <= quantum <= 1000000 or not 1 <= aging_interval <= 1000000):
@@ -26,7 +27,8 @@ def schedule(processes, algorithm, quantum=4, aging_interval=4):
         if (not 1 <= p["pid"] <= 1000000 or not 0 <= p["arrival_time"] <= 1000000
                 or not 1 <= p["burst_time"] <= 1000000 or not 1 <= p["priority"] <= 1000000):
             raise ValueError("PID, llegada, ráfaga o prioridad inválida")
-        p.update(remaining=p["burst_time"], first_start=None, completion=None, waited=0)
+        p.update(remaining=p["burst_time"], first_start=None, completion=None,
+                 effective_priority=p["priority"], wait_ticks_since_boost=0)
         rows.append(p)
     if len({p["pid"] for p in rows}) != len(rows):
         raise ValueError("PID duplicado")
@@ -88,7 +90,7 @@ def schedule(processes, algorithm, quantum=4, aging_interval=4):
         elif algorithm == "PRIORITY":
             p = min(candidates, key=lambda x: (x["priority"], *tie(x)))
         else:
-            p = min(candidates, key=lambda x: (max(1, x["priority"] - x["waited"] // aging_interval)
+            p = min(candidates, key=lambda x: (x["effective_priority"]
                              if algorithm == "PRIORITY_AGING" else x["priority"], *tie(x)))
         if p["first_start"] is None:
             p["first_start"] = time
@@ -96,9 +98,14 @@ def schedule(processes, algorithm, quantum=4, aging_interval=4):
             span = p["remaining"]
         else:
             span = 1
-            for other in candidates:
-                if other is not p:
-                    other["waited"] += 1
+            if algorithm == "PRIORITY_AGING":
+                p["wait_ticks_since_boost"] = 0
+                for other in candidates:
+                    if other is not p:
+                        other["wait_ticks_since_boost"] += 1
+                        if other["wait_ticks_since_boost"] >= aging_interval:
+                            other["effective_priority"] = max(1, other["effective_priority"] - 1)
+                            other["wait_ticks_since_boost"] = 0
         append(p["pid"], time, time + span)
         time += span
         p["remaining"] -= span
