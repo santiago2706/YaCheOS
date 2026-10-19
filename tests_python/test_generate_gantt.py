@@ -169,3 +169,18 @@ def test_documented_trace_and_svg_match_current_c_binary(binary, tmp_path, algor
     saved = json.loads(trace.read_text(encoding="utf-8"))
     assert saved == json.loads(result.stdout), f"Traza desactualizada: {trace}"
     assert svg.read_text(encoding="utf-8") == render_svg(saved), f"SVG desactualizado: {svg}"
+
+
+def test_gantt_renders_long_real_c_timeline(binary, tmp_path):
+    processes = [{"pid": pid, "arrival_time": 0, "burst_time": 300, "priority": 1}
+                 for pid in (1, 2)]
+    source = tmp_path / "processes.json"
+    source.write_text(json.dumps(processes), encoding="utf-8")
+    trace = tmp_path / "cpu_timeline.json"
+    subprocess.run([str(binary), "--algo", "RR", "--file", str(source),
+                    "--quantum", "1", "--out", str(trace)],
+                   check=True, capture_output=True, text=True)
+    root = ElementTree.fromstring(render_svg(json.loads(trace.read_text(encoding="utf-8"))))
+    cpu = blocks(root, "cpu")
+    assert len(cpu) == 600
+    assert cpu[-1]["data-end"] == "600"
