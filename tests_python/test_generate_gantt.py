@@ -43,6 +43,14 @@ def test_rr_svg_shows_repeated_cpu_bursts_and_waiting():
             if b["data-pid"] == "1"] == [(4, 15)]
 
 
+def test_more_than_six_processes_have_distinct_colors():
+    processes = [{"pid": pid, "arrival_time": 0, "burst_time": 1, "priority": 1}
+                 for pid in range(1, 9)]
+    root = ElementTree.fromstring(render_svg(schedule(processes, "FCFS")))
+    fills = [block["fill"] for block in blocks(root, "run")]
+    assert len(fills) == len(set(fills)) == 8
+
+
 @pytest.mark.parametrize("algorithm,expected", [
     ("SJF", [(1, 0, 5), (2, 5, 8), (4, 8, 14), (3, 14, 22)]),
     ("RR", [(1, 0, 4), (2, 4, 7), (3, 7, 11), (4, 11, 15),

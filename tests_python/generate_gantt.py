@@ -17,6 +17,14 @@ COLORS = ("#2563eb", "#db2777", "#059669", "#d97706", "#7c3aed", "#0891b2")
 ALGORITHM_ALIASES = {"PRIORITY_PREEMPTIVE_AGING": "PRIORITY_AGING"}
 
 
+def _process_color(index):
+    if index < len(COLORS):
+        return COLORS[index]
+    # Evita repetir el color de P1 en P7 y mantiene los cuatro gráficos
+    # documentados sin cambios. La separación áurea distribuye los tonos.
+    return f"hsl({(index * 137.508) % 360:.3f}, 70%, 32%)"
+
+
 def _canonical_algorithm(name):
     return ALGORITHM_ALIASES.get(name, name)
 
@@ -186,7 +194,7 @@ def render_svg(result):
         f'<text x="{left}" y="62" font-family="Arial,sans-serif" font-size="12" fill="#475569">Tiempo simulado (min) · color: ejecución · trama: espera</text>',
     ]
     sorted_pids = sorted(rows)
-    colors = {pid: COLORS[index % len(COLORS)] for index, pid in enumerate(sorted_pids)}
+    colors = {pid: _process_color(index) for index, pid in enumerate(sorted_pids)}
 
     step = _tick_step(duration)
     ticks = list(range(0, duration + 1, step))
