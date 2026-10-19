@@ -77,9 +77,15 @@ int load_processes_from_json(const char *filepath, Process *out_procs, int max_p
             extract_int_field(line, "\"burst_time\"", &p.burst_time);
             extract_int_field(line, "\"priority\"", &p.priority);
             extract_int_field(line, "\"memory_kb\"", &p.memory_kb);
-            if (p.arrival_time < 0 || p.burst_time <= 0) {
+            if (p.pid <= 0 || p.arrival_time < 0 || p.burst_time <= 0 || p.priority <= 0) {
                 fclose(fp);
                 return -1;
+            }
+            for (int i = 0; i < count; i++) {
+                if (out_procs[i].pid == p.pid) {
+                    fclose(fp);
+                    return -1;
+                }
             }
             p.remaining_time = p.burst_time;
             p.effective_priority = p.priority;
