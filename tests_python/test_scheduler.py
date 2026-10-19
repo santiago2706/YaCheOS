@@ -53,6 +53,13 @@ CASES = [
                              {"pid": 2, "arrival_time": 2, "burst_time": 1, "priority": 2}], "RR", 2, 4, None),
     ("priority_preemption", [{"pid": 1, "arrival_time": 0, "burst_time": 4, "priority": 4},
                              {"pid": 2, "arrival_time": 1, "burst_time": 1, "priority": 1}], "PRIORITY_PREEMPTIVE", 4, 4, None),
+    ("rr_unsorted_arrivals", [{"pid": 3, "arrival_time": 0, "burst_time": 4, "priority": 1},
+                              {"pid": 2, "arrival_time": 2, "burst_time": 1, "priority": 1},
+                              {"pid": 1, "arrival_time": 1, "burst_time": 1, "priority": 1}], "RR", 3, 4, None),
+    ("aging_resumes", [{"pid": 1, "arrival_time": 1, "burst_time": 4, "priority": 5},
+                       {"pid": 2, "arrival_time": 7, "burst_time": 7, "priority": 4},
+                       {"pid": 3, "arrival_time": 0, "burst_time": 5, "priority": 2},
+                       {"pid": 4, "arrival_time": 4, "burst_time": 5, "priority": 3}], "PRIORITY_AGING", 4, 3, None),
 ]
 
 
@@ -126,7 +133,15 @@ def test_c_matches_oracle(binary, tmp_path, name, processes, algorithm, quantum,
         assert actual["aging_interval"] == aging
     assert actual["total_time"] == max(row["completion"] for row in expected["processes"])
     for key in ("waiting_time", "turnaround_time", "response_time"):
-        assert actual[f"average_{key}"] == expected[f"average_{key}"]
+        # C publica dos decimales; el oráculo conserva tres. Comparar con el
+        # promedio exacto evita rechazar 1.33 frente a 1.333 o aceptar un
+        # redondeo incorrecto basado en una media ya redondeada.
+        exact = sum(row[key] for row in expected["processes"]) / len(expected["processes"])
+        reported = actual[f"average_{key}"]
+        assert reported == round(reported, 2)
+        assert abs(reported - exact) <= 0.005000001, (
+            f"{name}: average_{key}={reported}, promedio exacto={exact}"
+        )
         assert actual["metrics"][f"avg_{key}"] == actual[f"average_{key}"]
     timeline = complete_idle_intervals(actual["timeline"])
     assert timeline == expected["timeline"], f"{name}: {first_difference(expected['timeline'], timeline)}"
