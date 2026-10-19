@@ -135,6 +135,11 @@ func (h *CoreHandlers) HandleCPUSchedule(w http.ResponseWriter, r *http.Request)
 	// Si vinieron procesos en el body, escribirlos a un archivo temporal para el binario C
 	var tempFile string
 	if len(req.Processes) > 0 {
+		for i := range req.Processes {
+			if req.Processes[i].Priority == 0 {
+				req.Processes[i].Priority = 1
+			}
+		}
 		tmp, err := os.CreateTemp("", "yakcheos_procs_*.json")
 		if err == nil {
 			tempFile = tmp.Name()
