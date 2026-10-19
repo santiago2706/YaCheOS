@@ -1,0 +1,25 @@
+{
+  "paginacion": {
+    "tamano_pagina_bytes": 4096,
+    "tabla_paginas_proceso_100": {
+      "0": 5,
+      "1": 2,
+      "2": 7,
+      "3": 0
+    },
+    "caso_base_prueba": {
+      "direccion_virtual": 10000,
+      "pagina_esperada": 2,
+      "marco_esperado": 7,
+      "desplazamiento_esperado": 1808,
+      "direccion_fisica_esperada": 30480
+    }
+  },
+  "segmentacion": {
+    "segmentos": [
+      {"id": 0, "nombre": "Codigo", "base": 1000, "limite": 400},
+      {"id": 1, "nombre": "Datos", "base": 5200, "limite": 800},
+      {"id": 2, "nombre": "Pila", "base": 9000, "limite": 300}
+    ]
+  }
+}

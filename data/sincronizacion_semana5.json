@@ -1,0 +1,18 @@
+{
+  "productor_consumidor": {
+    "capacidad_buffer": 5,
+    "productores": 2,
+    "consumidores": 2,
+    "total_elementos": 20,
+    "semaforos_iniciales": {
+      "mutex": 1,
+      "vacios": 5,
+      "llenos": 0
+    }
+  },
+  "filosofos": {
+    "num_filosofos": 5,
+    "recursos": 5,
+    "modalidades": ["deadlock", "preventiva"]
+  }
+}
