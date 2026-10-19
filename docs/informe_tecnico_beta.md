@@ -20,7 +20,18 @@ python -m pytest -q tests_python
 go test ./cmd/server -run TestPageReplacementBeladyAnomaly -v
 ```
 
-Los cuatro `cpu_*.json` son salidas guardadas del planificador C integrado, ejecutado con `--algo`, `--file tests_python/fixtures/procesos_semana4.json`, `--quantum 4` y `--out`. La suite de QA genera archivos temporales `cpu_timeline.json` y compara las diez ejecuciones C con el oráculo. El generador de Gantt acepta esos JSON individuales por `--input`.
+Para ejecutar **toda** la suite Go, los endpoints de CPU y memoria necesitan los ejecutables C en `bin/`. En sistemas con `make`, se generan con `make -C src/core_c`. En Windows, si `make` no está instalado pero `gcc` sí, desde la raíz del repositorio se puede usar:
+
+```powershell
+New-Item -ItemType Directory -Path bin -Force | Out-Null
+gcc -std=c11 -Wall -Wextra -Werror -O2 -o bin/scheduler.exe src/core_c/queue.c src/core_c/scheduler_nonpreemptive.c src/core_c/scheduler_preemptive.c src/core_c/scheduler.c
+gcc -std=c11 -Wall -Wextra -Werror -O2 -o bin/memory_translate.exe src/core_c/memory_translate.c
+go test ./...
+```
+
+Los binarios locales están ignorados por Git y se deben reconstruir después de cambiar las fuentes C.
+
+Los cuatro `cpu_*.json` son salidas guardadas del planificador C integrado, ejecutado con `--algo`, `--file tests_python/fixtures/procesos_semana4.json`, `--quantum 4` y `--out`. La suite de QA genera archivos temporales `cpu_timeline.json` y compara doce casos C con el oráculo, incluidos el orden de llegadas en RR y el envejecimiento. También comprueba que las cuatro trazas y sus SVG guardados coincidan con el ejecutable actual. El generador de Gantt acepta esos JSON individuales por `--input`.
 
 ## 2. Planificación de CPU y Gantt
 
@@ -109,7 +120,7 @@ Las entradas para repetirlo están en [`referencias_belady_3marcos.json`](../tes
 
 | Entregable | Evidencia en esta rama | Pendiente externo |
 |---|---|---|
-| Gantt exacto y métricas | Diez comparaciones CPU C/oráculo; cuatro trazas C y SVG generados desde ellas; prueba con tiempo inactivo y envejecimiento | Mostrar los SVG en la interfaz web |
+| Gantt exacto y métricas | Doce comparaciones CPU C/oráculo; cuatro trazas C y SVG generados desde ellas; prueba con tiempo inactivo y envejecimiento | Mostrar los SVG en la interfaz web |
 | Paginación y segmentación | Dos ejecutables C comparados con Python: `30480`, `5500` y trap; trazas C conservadas | Ninguno para la auditoría de estos casos |
 | Asignación contigua | Salida C con 6 unidades libres, hueco máximo 2 y alerta, comparada con Python | Ninguno para el caso de fragmentación probado |
 | Reemplazo | FIFO/LRU/Óptimo en Python, tabla, trazas y caso de Belady; prueba Go del conteo FIFO | Conectar el endpoint al script Python y mostrar la traza completa en la web |
