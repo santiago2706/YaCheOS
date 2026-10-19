@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -91,8 +92,6 @@ func TestCPUScheduleEndpointFCFS(t *testing.T) {
 	if data["algorithm"] != "FCFS" {
 		t.Errorf("Se esperaba algorithm FCFS, se obtuvo %v", data["algorithm"])
 	}
-
-	// Verificar promedio de espera de 5.75 min según contrato Semana 4
 	avgWait, ok := data["average_waiting_time"].(float64)
 	if !ok || avgWait != 5.75 {
 		t.Errorf("Se esperaba average_waiting_time 5.75, pero se obtuvo %v", data["average_waiting_time"])
@@ -218,7 +217,6 @@ func TestMemoryTranslateSegmentationTrapReturns400NoPanic(t *testing.T) {
 	dataDir := filepath.Join(baseDir, "data")
 
 	router := setupRouter(webDir, dataDir, baseDir)
-	// Acceso inválido: segmento 1 (límite 800), offset 900
 	req, err := http.NewRequest(http.MethodGet, "/api/v1/memory/translate?mode=segmentation&segment=1&offset=900", nil)
 	if err != nil {
 		t.Fatalf("Error al crear request HTTP: %v", err)
@@ -272,7 +270,7 @@ func TestPageReplacementBeladyAnomaly(t *testing.T) {
 	}
 }
 
-// TestSyncStatusEndpoint verifica la integración con el módulo de sincronización (T1.6).
+// TestSyncStatusEndpoint verifica la integración con el módulo de sincronización.
 func TestSyncStatusEndpoint(t *testing.T) {
 	baseDir := resolveBaseDir()
 	webDir := filepath.Join(baseDir, "web")
@@ -304,7 +302,7 @@ func TestSyncStatusEndpoint(t *testing.T) {
 	}
 }
 
-// TestCPUScheduleRoundRobinQuantum verifica el cálculo exacto de Round Robin con q=4 (Semana 4: W_prom=9.25, R_prom=4.0).
+// TestCPUScheduleRoundRobinQuantum verifica el cálculo exacto de Round Robin con q=4.
 func TestCPUScheduleRoundRobinQuantum(t *testing.T) {
 	baseDir := resolveBaseDir()
 	webDir := filepath.Join(baseDir, "web")
@@ -327,7 +325,6 @@ func TestCPUScheduleRoundRobinQuantum(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &data); err != nil {
 		t.Fatalf("Error decodificando JSON: %v", err)
 	}
-
 	if data["average_waiting_time"] != 9.25 {
 		t.Errorf("Se esperaba average_waiting_time 9.25 para RR, se obtuvo %v", data["average_waiting_time"])
 	}
@@ -336,7 +333,7 @@ func TestCPUScheduleRoundRobinQuantum(t *testing.T) {
 	}
 }
 
-// TestMemoryTranslateSegmentationValid5500 verifica el cálculo exacto de segmentación válida (Base 5200 + 300 = 5500).
+// TestMemoryTranslateSegmentationValid5500 verifica el cálculo exacto de segmentación válida.
 func TestMemoryTranslateSegmentationValid5500(t *testing.T) {
 	baseDir := resolveBaseDir()
 	webDir := filepath.Join(baseDir, "web")
@@ -403,11 +400,227 @@ func TestSyncStepProduceAndConsume(t *testing.T) {
 	if rrCons.Code != http.StatusOK {
 		t.Fatalf("Error al consumir: %d", rrCons.Code)
 	}
-
 	var dataCons map[string]any
 	_ = json.Unmarshal(rrCons.Body.Bytes(), &dataCons)
 	pcCons := dataCons["prod_cons"].(map[string]any)
 	if pcCons["buffer_len"] != float64(0) {
 		t.Errorf("Se esperaba buffer_len 0 despues de consumir, se obtuvo %v", pcCons["buffer_len"])
+	}
+}
+
+// ============================================================================
+// PRUEBAS DE INTEGRACIÓN CONCURRENTE (ÍTEM 11)
+// ============================================================================
+
+// TestSyncConcurrentAccess dispara peticiones simultáneas de consulta, avance y reinicio
+// para asegurar que no existan carreras de datos (data races).
+func TestSyncConcurrentAccess(t *testing.T) {
+	baseDir := resolveBaseDir()
+	webDir := filepath.Join(baseDir, "web")
+	dataDir := filepath.Join(baseDir, "data")
+	router := setupRouter(webDir, dataDir, baseDir)
+
+	const numGoroutines = 20
+	const opsPerGoroutine = 15
+
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < opsPerGoroutine; j++ {
+				var target string
+				switch (id + j) % 5 {
+				case 0:
+					target = "/api/v1/sync/status"
+				case 1:
+					target = "/api/v1/sync/step?action=produce"
+				case 2:
+					target = "/api/v1/sync/step?action=consume"
+				case 3:
+					target = "/api/v1/sync/step?actor=philosopher"
+				case 4:
+					target = "/api/v1/sync/step?action=reset"
+				}
+
+				req, err := http.NewRequest(http.MethodGet, target, nil)
+				if err != nil {
+					t.Errorf("Error creando request HTTP: %v", err)
+					return
+				}
+				rr := httptest.NewRecorder()
+				router.ServeHTTP(rr, req)
+
+				if rr.Code != http.StatusOK {
+					t.Errorf("Petición a %s falló con código HTTP %d", target, rr.Code)
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+// TestSyncDeadlockAndPIDsReporting verifica que la API reporte el deadlock y sus PIDs exactos.
+func TestSyncDeadlockAndPIDsReporting(t *testing.T) {
+	baseDir := resolveBaseDir()
+	webDir := filepath.Join(baseDir, "web")
+	dataDir := filepath.Join(baseDir, "data")
+	router := setupRouter(webDir, dataDir, baseDir)
+
+	// Reiniciar simulación en modo deadlock
+	reqReset, _ := http.NewRequest(http.MethodGet, "/api/v1/sync/step?action=reset&mode=deadlock", nil)
+	rrReset := httptest.NewRecorder()
+	router.ServeHTTP(rrReset, reqReset)
+
+	// Avanzar paso a paso a todos los filósofos hasta que todos tomen su primer tenedor e intenten el segundo
+	for step := 0; step < 10; step++ {
+		reqStep, _ := http.NewRequest(http.MethodGet, "/api/v1/sync/step?actor=philosopher", nil)
+		rrStep := httptest.NewRecorder()
+		router.ServeHTTP(rrStep, reqStep)
+	}
+
+	// Consultar estado final de sincronización
+	reqStatus, _ := http.NewRequest(http.MethodGet, "/api/v1/sync/status", nil)
+	rrStatus := httptest.NewRecorder()
+	router.ServeHTTP(rrStatus, reqStatus)
+
+	if rrStatus.Code != http.StatusOK {
+		t.Fatalf("Se esperaba HTTP 200, se obtuvo %d", rrStatus.Code)
+	}
+
+	var res struct {
+		Philosophers struct {
+			Deadlock bool  `json:"deadlock"`
+			Cycle    []int `json:"cycle"`
+		} `json:"philosophers"`
+	}
+	if err := json.Unmarshal(rrStatus.Body.Bytes(), &res); err != nil {
+		t.Fatalf("Error parseando respuesta JSON: %v", err)
+	}
+
+	if !res.Philosophers.Deadlock {
+		t.Errorf("Se esperaba que la API reportara deadlock = true")
+	}
+	if len(res.Philosophers.Cycle) != 5 {
+		t.Errorf("Se esperaban 5 PIDs en el ciclo de deadlock, pero se obtuvo %v", res.Philosophers.Cycle)
+	}
+}
+
+// TestSyncBufferBlockedEventsViaAPI verifica que los eventos BLOCKED del buffer
+// sean registrados y expuestos a través de los endpoints de la API.
+func TestSyncBufferBlockedEventsViaAPI(t *testing.T) {
+	baseDir := resolveBaseDir()
+	webDir := filepath.Join(baseDir, "web")
+	dataDir := filepath.Join(baseDir, "data")
+	router := setupRouter(webDir, dataDir, baseDir)
+
+	// Reiniciar
+	reqReset, _ := http.NewRequest(http.MethodGet, "/api/v1/sync/step?action=reset", nil)
+	rrReset := httptest.NewRecorder()
+	router.ServeHTTP(rrReset, reqReset)
+
+	// Llenar la capacidad del buffer (5 elementos)
+	for i := 0; i < 5; i++ {
+		reqProd, _ := http.NewRequest(http.MethodGet, "/api/v1/sync/step?action=produce", nil)
+		rrProd := httptest.NewRecorder()
+		router.ServeHTTP(rrProd, reqProd)
+	}
+
+	// Producir un elemento adicional cuando el buffer está lleno para forzar el bloqueo
+	reqProdBlock, _ := http.NewRequest(http.MethodGet, "/api/v1/sync/step?action=produce", nil)
+	rrProdBlock := httptest.NewRecorder()
+	router.ServeHTTP(rrProdBlock, reqProdBlock)
+
+	// Consultar los eventos del buffer
+	reqStatus, _ := http.NewRequest(http.MethodGet, "/api/v1/sync/status", nil)
+	rrStatus := httptest.NewRecorder()
+	router.ServeHTTP(rrStatus, reqStatus)
+
+	var res struct {
+		ProdCons struct {
+			Events []struct {
+				Action string `json:"action"`
+			} `json:"events"`
+		} `json:"prod_cons"`
+	}
+	if err := json.Unmarshal(rrStatus.Body.Bytes(), &res); err != nil {
+		t.Fatalf("Error al decodificar JSON: %v", err)
+	}
+
+	hasBlocked := false
+	for _, ev := range res.ProdCons.Events {
+		if ev.Action == "BLOCKED" {
+			hasBlocked = true
+			break
+		}
+	}
+
+	if !hasBlocked {
+		t.Errorf("No se encontró el evento BLOCKED en los eventos registrados del buffer")
+	}
+}
+
+// TestSyncResetConsistency comprueba que el reinicio deje un estado inicial consistente.
+func TestSyncResetConsistency(t *testing.T) {
+	baseDir := resolveBaseDir()
+	webDir := filepath.Join(baseDir, "web")
+	dataDir := filepath.Join(baseDir, "data")
+	router := setupRouter(webDir, dataDir, baseDir)
+
+	// Generar actividad previa
+	reqStep, _ := http.NewRequest(http.MethodGet, "/api/v1/sync/step?action=produce", nil)
+	rrStep := httptest.NewRecorder()
+	router.ServeHTTP(rrStep, reqStep)
+
+	// Ejecutar Reset con cambio a modo preventiva
+	reqReset, _ := http.NewRequest(http.MethodGet, "/api/v1/sync/step?action=reset&mode=preventiva", nil)
+	rrReset := httptest.NewRecorder()
+	router.ServeHTTP(rrReset, reqReset)
+
+	var res struct {
+		Philosophers struct {
+			Count      int      `json:"count"`
+			States     []string `json:"states"`
+			ForksOwner []int    `json:"forks_owner"`
+			Mode       string   `json:"mode"`
+			Deadlock   bool     `json:"deadlock"`
+			Cycle      []int    `json:"cycle"`
+		} `json:"philosophers"`
+		ProdCons struct {
+			Capacity   int            `json:"capacity"`
+			BufferLen  int            `json:"buffer_len"`
+			Items      []int          `json:"items"`
+			Semaphores map[string]int `json:"semaphores"`
+		} `json:"prod_cons"`
+	}
+
+	if err := json.Unmarshal(rrReset.Body.Bytes(), &res); err != nil {
+		t.Fatalf("Error al decodificar respuesta JSON tras reset: %v", err)
+	}
+
+	// Validar estado del Buffer
+	if res.ProdCons.BufferLen != 0 || len(res.ProdCons.Items) != 0 {
+		t.Errorf("El buffer debería estar vacío tras el reset, se obtuvo len=%d", res.ProdCons.BufferLen)
+	}
+	if res.ProdCons.Semaphores["mutex"] != 1 || res.ProdCons.Semaphores["vacios"] != 5 || res.ProdCons.Semaphores["llenos"] != 0 {
+		t.Errorf("Semáforos en estado inconsistente tras reset: %+v", res.ProdCons.Semaphores)
+	}
+
+	// Validar estado de Filósofos
+	if res.Philosophers.Mode != "preventiva" {
+		t.Errorf("Se esperaba modo 'preventiva', se obtuvo '%s'", res.Philosophers.Mode)
+	}
+	if res.Philosophers.Deadlock {
+		t.Errorf("El campo deadlock debería ser false tras el reset")
+	}
+	if len(res.Philosophers.Cycle) != 0 {
+		t.Errorf("El arreglo cycle debería estar vacío tras el reset")
+	}
+	for i, st := range res.Philosophers.States {
+		if st != "PENSANDO" {
+			t.Errorf("El filósofo %d debería estar en estado 'PENSANDO', pero está '%s'", i, st)
+		}
 	}
 }
