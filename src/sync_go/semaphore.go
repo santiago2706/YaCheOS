@@ -39,6 +39,18 @@ func (cs *CountingSemaphore) Wait() {
 	}
 }
 
+// WaitNotify adquiere un permiso. Si no hay disponibles, ejecuta el callback onBlock
+// justo antes de que el hilo se bloquee, garantizando la coordinación atómica.
+func (cs *CountingSemaphore) WaitNotify(onBlock func()) {
+	// Restamos atómicamente. Si es menor a 0, sabemos con 100% de certeza que bloquearemos.
+	if cs.permits.Add(-1) < 0 {
+		if onBlock != nil {
+			onBlock() // Registramos el timestamp/evento justo antes de dormir
+		}
+		<-cs.waiters // Suspensión real de la goroutine
+	}
+}
+
 // P es un alias estándar para Wait.
 func (cs *CountingSemaphore) P() {
 	cs.Wait()
