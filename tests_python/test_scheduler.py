@@ -60,6 +60,8 @@ CASES = [
                        {"pid": 2, "arrival_time": 7, "burst_time": 7, "priority": 4},
                        {"pid": 3, "arrival_time": 0, "burst_time": 5, "priority": 2},
                        {"pid": 4, "arrival_time": 4, "burst_time": 5, "priority": 3}], "PRIORITY_AGING", 4, 3, None),
+    ("rr_long_timeline", [{"pid": 1, "arrival_time": 0, "burst_time": 300, "priority": 1},
+                          {"pid": 2, "arrival_time": 0, "burst_time": 300, "priority": 1}], "RR", 1, 4, None),
 ]
 
 

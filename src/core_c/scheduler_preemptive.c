@@ -10,14 +10,13 @@ static void append_or_extend_segment(ScheduleResult *out, const Process *p, int 
             return;
         }
     }
-    if (out->segment_count < MAX_TIMELINE_SEGMENTS) {
-        TimelineSegment *seg = &out->segments[out->segment_count++];
-        seg->pid = p->pid;
-        memcpy(seg->name, p->name, sizeof(seg->name));
-        seg->name[sizeof(seg->name) - 1] = '\0';
-        seg->start_time = start;
-        seg->end_time = end;
-    }
+    TimelineSegment *seg = append_timeline_segment(out);
+    if (!seg) return;
+    seg->pid = p->pid;
+    memcpy(seg->name, p->name, sizeof(seg->name));
+    seg->name[sizeof(seg->name) - 1] = '\0';
+    seg->start_time = start;
+    seg->end_time = end;
 }
 
 static void finalize_metrics(ScheduleResult *out) {

@@ -1,7 +1,36 @@
 #include "pcb.h"
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+TimelineSegment *append_timeline_segment(ScheduleResult *res) {
+    if (res->timeline_failed) return NULL;
+    if (res->segment_count == res->segment_capacity) {
+        const int max_capacity = INT_MAX / (int)sizeof(TimelineSegment);
+        int capacity = res->segment_capacity == 0 ? INITIAL_TIMELINE_CAPACITY :
+            (res->segment_capacity > max_capacity / 2 ? max_capacity : res->segment_capacity * 2);
+        if (capacity <= res->segment_capacity) {
+            res->timeline_failed = true;
+            return NULL;
+        }
+        TimelineSegment *segments = realloc(res->segments, (size_t)capacity * sizeof(*segments));
+        if (!segments) {
+            res->timeline_failed = true;
+            return NULL;
+        }
+        res->segments = segments;
+        res->segment_capacity = capacity;
+    }
+    return &res->segments[res->segment_count++];
+}
+
+void free_schedule_result(ScheduleResult *res) {
+    free(res->segments);
+    res->segments = NULL;
+    res->segment_count = 0;
+    res->segment_capacity = 0;
+}
 
 static void extract_int_field(const char *line, const char *key, int *out_val) {
     const char *pos = strstr(line, key);
@@ -204,7 +233,13 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    if (result.timeline_failed) {
+        fprintf(stderr, "{\"error\": \"No se pudo reservar memoria para la traza CPU\"}\n");
+        free_schedule_result(&result);
+        return EXIT_FAILURE;
+    }
     print_schedule_json(&result, outpath);
+    free_schedule_result(&result);
     return EXIT_SUCCESS;
 }
 #endif

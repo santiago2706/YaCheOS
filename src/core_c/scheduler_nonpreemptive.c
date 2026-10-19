@@ -38,8 +38,9 @@ static void compute_averages(ScheduleResult *out) {
 }
 
 static void record_segment(ScheduleResult *out, const Process *p, int start, int end) {
-    if (start >= end || out->segment_count >= MAX_TIMELINE_SEGMENTS) return;
-    TimelineSegment *seg = &out->segments[out->segment_count++];
+    if (start >= end) return;
+    TimelineSegment *seg = append_timeline_segment(out);
+    if (!seg) return;
     seg->pid = p->pid;
     strncpy(seg->name, p->name, MAX_NAME_LEN - 1);
     seg->start_time = start;
