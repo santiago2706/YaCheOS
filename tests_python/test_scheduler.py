@@ -10,15 +10,18 @@ import pytest
 from ground_truth_semana4 import schedule
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCES = [ROOT / "src/core_c" / file for file in
-           ("scheduler.c", "queue.c", "scheduler_nonpreemptive.c", "scheduler_preemptive.c")]
+CORE_DIR = Path(os.environ.get("YAKCHEOS_CORE_C_DIR", ROOT / "src/core_c"))
+SPLIT_SOURCES = [CORE_DIR / file for file in
+                 ("queue.c", "scheduler_nonpreemptive.c", "scheduler_preemptive.c")]
+SOURCES = [CORE_DIR / "scheduler.c"] + (SPLIT_SOURCES if any(path.exists() for path in SPLIT_SOURCES) else [])
+HEADERS = [CORE_DIR / "pcb.h"]
 BASE_PATH = ROOT / "tests_python/fixtures/procesos_semana4.json"
 
 
 @pytest.fixture(scope="session")
 def binary(tmp_path_factory):
-    missing = [str(source.relative_to(ROOT)) + (" (vacio)" if source.is_file() else " (no existe)")
-               for source in SOURCES if not source.is_file() or source.stat().st_size == 0]
+    missing = [str(source) + (" (vacio)" if source.is_file() else " (no existe)")
+               for source in SOURCES + HEADERS if not source.is_file() or source.stat().st_size == 0]
     if not BASE_PATH.is_file() or not BASE_PATH.read_text(encoding="utf-8").strip():
         missing.append(str(BASE_PATH.relative_to(ROOT)) + " (sin datos)")
     if missing:
