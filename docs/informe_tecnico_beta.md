@@ -1,64 +1,67 @@
 # Informe técnico Beta — planificación y memoria
 
-**Estado de la evidencia:** cálculos y gráficos de QA reproducibles. La comparación con el motor C y la visualización integrada en la web quedan pendientes de los módulos de los integrantes 1 y 2. Este documento no presenta resultados de esos motores como si ya se hubieran ejecutado.
+**Estado de la evidencia:** los cálculos de QA se contrastaron con los ejecutables C integrados para CPU y memoria. Las trazas C y los gráficos generados a partir de ellas se guardan en este informe. La prueba existente del endpoint web confirma la anomalía de Belady; la exposición de la traza completa de reemplazo en la web sigue pendiente.
 
 ## 1. Alcance, datos y método
 
-Se usaron únicamente los casos numéricos del `plan_de_sprints_yakcheos_6_modulos.md`, secciones 2.1, 2.3 y tarea S3.1. Los datos de CPU están transcritos en [`tests_python/fixtures/procesos_semana4.json`](../tests_python/fixtures/procesos_semana4.json); los de paginación y segmentación, en [`tests_python/fixtures/memoria_semana6.json`](../tests_python/fixtures/memoria_semana6.json). El patrón de reemplazo es `1,2,3,4,1,2,5,1,2,3,4,5`, con 3 y 4 marcos. Los programas de Python son oráculos independientes; todavía no prueban que el código C produzca los mismos resultados.
+Se usaron los casos numéricos del `plan_de_sprints_yakcheos_6_modulos.md`, secciones 2.1, 2.3 y tarea S3.1. Los datos de CPU están en [`tests_python/fixtures/procesos_semana4.json`](../tests_python/fixtures/procesos_semana4.json); los de paginación y segmentación, en [`tests_python/fixtures/memoria_semana6.json`](../tests_python/fixtures/memoria_semana6.json). Se verificó que esta última coincide numéricamente con `data/memoria_semana6.json`. El patrón de reemplazo es `1,2,3,4,1,2,5,1,2,3,4,5`, con 3 y 4 marcos. Las pruebas compilan y ejecutan C con `gcc -std=c11 -Wall -Wextra -Werror`; comparan sus números con los oráculos independientes de Python.
 
 Para reproducir la evidencia desde la raíz del repositorio:
 
 ```powershell
-python tests_python/ground_truth_semana4.py | python tests_python/generate_gantt.py --input - --output-dir docs/gantt --algorithms FCFS SJF RR PRIORITY
+python tests_python/generate_gantt.py --input docs/traces/cpu_fcfs.json --output-dir docs/gantt
+python tests_python/generate_gantt.py --input docs/traces/cpu_sjf.json --output-dir docs/gantt
+python tests_python/generate_gantt.py --input docs/traces/cpu_rr.json --output-dir docs/gantt
+python tests_python/generate_gantt.py --input docs/traces/cpu_priority.json --output-dir docs/gantt
 python tests_python/memory_audit.py
 python tests_python/page_replacement.py --file tests_python/fixtures/referencias_belady_3marcos.json
 python tests_python/page_replacement.py --file tests_python/fixtures/referencias_belady_4marcos.json
-python -m pytest -q tests_python/test_ground_truth.py tests_python/test_page_replacement.py tests_python/test_generate_gantt.py tests_python/test_memory_audit.py
+python -m pytest -q tests_python
+go test ./cmd/server -run TestPageReplacementBeladyAnomaly -v
 ```
 
-El generador de Gantt también acepta un JSON individual de `cpu_timeline.json` por `--input`. Los SVG enlazados abajo se generaron con la salida del oráculo sobre el caso documentado; deben regenerarse con la salida C cuando esté disponible.
+Los cuatro `cpu_*.json` son salidas guardadas del planificador C integrado, ejecutado con `--algo`, `--file tests_python/fixtures/procesos_semana4.json`, `--quantum 4` y `--out`. La suite de QA genera archivos temporales `cpu_timeline.json` y compara las diez ejecuciones C con el oráculo. El generador de Gantt acepta esos JSON individuales por `--input`.
 
 ## 2. Planificación de CPU y Gantt
 
 Los minutos son ticks simulados. Para cada proceso, `retorno = finalización − llegada`, `espera = retorno − ráfaga` y `respuesta = primer inicio − llegada`. El oráculo emplea llegada y PID para desempatar, y en RR coloca las llegadas ocurridas hasta el final del quantum antes de reinsertar el proceso desalojado.
 
-| Algoritmo | Espera media (min) | Retorno medio (min) | Respuesta media (min) | Diagrama |
-|---|---:|---:|---:|---|
-| FCFS | 5.750 | 11.250 | 5.750 | [SVG](gantt/gantt_fcfs.svg) |
-| SJF no apropiativo | 5.250 | 10.750 | 5.250 | [SVG](gantt/gantt_sjf.svg) |
-| RR, quantum 4 | 9.250 | 14.750 | 4.000 | [SVG](gantt/gantt_rr.svg) |
-| Prioridad no apropiativa | 7.750 | 13.250 | 7.750 | [SVG](gantt/gantt_priority.svg) |
+| Algoritmo | Espera media (min) | Retorno medio (min) | Respuesta media (min) | Traza C | Diagrama |
+|---|---:|---:|---:|---|---|
+| FCFS | 5.750 | 11.250 | 5.750 | [JSON](traces/cpu_fcfs.json) | [SVG](gantt/gantt_fcfs.svg) |
+| SJF no apropiativo | 5.250 | 10.750 | 5.250 | [JSON](traces/cpu_sjf.json) | [SVG](gantt/gantt_sjf.svg) |
+| RR, quantum 4 | 9.250 | 14.750 | 4.000 | [JSON](traces/cpu_rr.json) | [SVG](gantt/gantt_rr.svg) |
+| Prioridad no apropiativa | 7.750 | 13.250 | 7.750 | [JSON](traces/cpu_priority.json) | [SVG](gantt/gantt_priority.svg) |
 
-Los promedios de espera coinciden con los cuatro resultados exigidos por el plan. Los SVG muestran la secuencia de CPU, los tramos de espera entre llegada y ejecución, eje de tiempo, color por proceso y los tres promedios.
+Los cuatro resultados C coinciden con el oráculo y los promedios de espera exigidos por el plan. Los SVG se generaron desde esas trazas C; muestran la secuencia de CPU, los tramos de espera entre llegada y ejecución, eje de tiempo, color por proceso y los tres promedios. El motor C omite intervalos inactivos del JSON; el generador los reconstruye a partir de los tiempos y comprueba que no haya procesos listos durante ellos.
 
-![Gantt FCFS generado con el oráculo](gantt/gantt_fcfs.svg)
+![Gantt FCFS generado desde C](gantt/gantt_fcfs.svg)
 
-![Gantt SJF generado con el oráculo](gantt/gantt_sjf.svg)
+![Gantt SJF generado desde C](gantt/gantt_sjf.svg)
 
-![Gantt RR generado con el oráculo](gantt/gantt_rr.svg)
+![Gantt RR generado desde C](gantt/gantt_rr.svg)
 
-![Gantt de prioridad generado con el oráculo](gantt/gantt_priority.svg)
+![Gantt de prioridad generado desde C](gantt/gantt_priority.svg)
 
 ## 3. Auditoría de memoria
 
 ### 3.1 Asignación contigua y fragmentación externa
 
-First Fit elige el primer hueco suficiente; Best Fit elige el más pequeño que alcance para la solicitud. Ambos requieren un hueco **contiguo**. Sumar toda la memoria libre no basta para decidir si cabe un bloque. Esta distinción corresponde a la asignación contigua descrita en la sección 9.2 de *Operating System Concepts* y al capítulo de administración de memoria de *Modern Operating Systems*; el mapa siguiente es un **caso de prueba construido** para el criterio de fragmentación del plan, no una salida observada del motor C. [Silberschatz, Galvin y Gagne (Wiley)](https://www.wiley-vch.de/en/areas-interest/computing-computer-sciences/computer-science-17cs/general-introductory-computer-science-17cs0/silberschatz-39-s-operating-system-concepts-978-1-119-45408-3), [Tanenbaum y Bos (Pearson)](https://www.pearson.com/en-us/subject-catalog/p/modern-operating-systems/P200000003295/9780137618934).
+First Fit elige el primer hueco suficiente; Best Fit elige el más pequeño que alcance para la solicitud. Ambos requieren un hueco **contiguo**. Sumar toda la memoria libre no basta para decidir si cabe un bloque. Esta distinción corresponde a la asignación contigua descrita en la sección 9.2 de *Operating System Concepts* y al capítulo de administración de memoria de *Modern Operating Systems*. El mapa siguiente es la [salida real del caso `--mode fragmentation` del motor C](traces/memoria_fragmentacion_c.json), contrastada con `fragmentation()` de Python. [Silberschatz, Galvin y Gagne (Wiley)](https://www.wiley-vch.de/en/areas-interest/computing-computer-sciences/computer-science-17cs/general-introductory-computer-science-17cs0/silberschatz-39-s-operating-system-concepts-978-1-119-45408-3), [Tanenbaum y Bos (Pearson)](https://www.pearson.com/en-us/subject-catalog/p/modern-operating-systems/P200000003295/9780137618934).
 
-| Bloque inicial (unidades abstractas) | Inicio | Tamaño | Estado |
+| Bloque en la salida C | Inicio | Tamaño | Estado |
 |---|---:|---:|---|
-| 1 | 0 | 2 | Ocupado |
-| 2 | 2 | 2 | Libre |
-| 3 | 4 | 1 | Ocupado |
-| 4 | 5 | 2 | Libre |
-| 5 | 7 | 1 | Ocupado |
-| 6 | 8 | 2 | Libre |
+| 1 | 0 | 2 | Libre |
+| 2 | 2 | 2 | Ocupado por PID 2 |
+| 3 | 4 | 2 | Libre |
+| 4 | 6 | 2 | Ocupado por PID 4 |
+| 5 | 8 | 2 | Libre |
 
-**Solicitud:** 3 unidades contiguas. **Resultado esperado:** rechazo por fragmentación externa; hay 6 unidades libres en total, pero el hueco mayor tiene 2. El mapa no cambia tras el rechazo. `fragmentation()` reproduce ese dictamen y une huecos libres adyacentes antes de medir su tamaño. Falta contrastarlo con `memory_map.json` y la alerta del motor C del integrante 2.
+**Solicitud:** 3 unidades contiguas. **Resultado observado:** C emite `external_fragmentation: true` y una alerta de rechazo; hay 6 unidades libres en total, pero el hueco mayor tiene 2. El oráculo `fragmentation()` reproduce ese dictamen a partir de los bloques devueltos por C. La prueba de QA ejecuta el motor C y comprueba ambos resultados.
 
 ### 3.2 Paginación y traducción
 
-Con páginas y marcos de **4096 bytes**, la dirección virtual **10000** se descompone en página `10000 // 4096 = 2` y desplazamiento `10000 % 4096 = 1808`. La tabla documentada asigna la página 2 al marco 7; por tanto, `7 × 4096 + 1808 = 30480` es la dirección física. El oráculo [`memory_audit.py`](../tests_python/memory_audit.py) y su prueba reproducen el cálculo. Falta comprobar que `memory_paging.c` emita exactamente esos valores cuando exista. El marco teórico de paginación está en la sección 9.3 de [*Operating System Concepts* (Wiley)](https://www.wiley-vch.de/en/areas-interest/computing-computer-sciences/computer-science-17cs/general-introductory-computer-science-17cs0/silberschatz-39-s-operating-system-concepts-978-1-119-45408-3).
+Con páginas y marcos de **4096 bytes**, la dirección virtual **10000** se descompone en página `10000 // 4096 = 2` y desplazamiento `10000 % 4096 = 1808`. La tabla documentada asigna la página 2 al marco 7; por tanto, `7 × 4096 + 1808 = 30480` es la dirección física. El oráculo [`memory_audit.py`](../tests_python/memory_audit.py) y los dos ejecutables C (`memory_cli` y `memory_translate`) produjeron esos valores. Se conserva la [traza de `memory_cli --mode paging --vaddr 10000`](traces/memoria_paginacion_c.json). El marco teórico de paginación está en la sección 9.3 de [*Operating System Concepts* (Wiley)](https://www.wiley-vch.de/en/areas-interest/computing-computer-sciences/computer-science-17cs/general-introductory-computer-science-17cs0/silberschatz-39-s-operating-system-concepts-978-1-119-45408-3).
 
 ### 3.3 Segmentación y límites
 
@@ -70,7 +73,7 @@ El límite es la **longitud** del segmento: solo son válidos los desplazamiento
 | 1, Datos | 5200 | 800 | 5200–5999 |
 | 2, Pila | 9000 | 300 | 9000–9299 |
 
-Para Datos, `(1, 300)` se traduce a `5200 + 300 = 5500`. `(1, 900)` excede el límite y produce `EXCEPTION_SEGMENTATION_FAULT`. El desplazamiento **800**, igual al límite, también debe fallar. Estos resultados están probados en Python; la comparación con el módulo C está pendiente.
+Para Datos, `(1, 300)` se traduce a `5200 + 300 = 5500`. `(1, 900)` excede el límite y produce `EXCEPTION_SEGMENTATION_FAULT`. El desplazamiento **800**, igual al límite, también falla. Estos resultados se verificaron en Python y en ambos ejecutables C. Se guardaron las trazas C de [acceso válido](traces/memoria_segmentacion_valida_c.json) y [fallo](traces/memoria_segmentacion_trap_c.json).
 
 ## 4. Reemplazo de páginas: FIFO, LRU y Óptimo
 
@@ -100,15 +103,15 @@ Detalle de FIFO con 3 marcos (cada fila es un acceso; `–` indica marco aún li
 | 10 | 4 | 5, 3, 4 | Fallo | 2 |
 | 11 | 5 | 5, 3, 4 | Acierto | – |
 
-Las entradas para repetirlo están en [`referencias_belady_3marcos.json`](../tests_python/fixtures/referencias_belady_3marcos.json) y [`referencias_belady_4marcos.json`](../tests_python/fixtures/referencias_belady_4marcos.json). `page_replacement.py` acepta esos JSON por `--file` o por `stdin`; emite un objeto con FIFO, LRU y OPTIMAL apto para que el servidor Go lo exponga. La vista web y el endpoint `/api/v1/memory/replace` corresponden al integrante 1 y aún no se han verificado en esta rama.
+Las entradas para repetirlo están en [`referencias_belady_3marcos.json`](../tests_python/fixtures/referencias_belady_3marcos.json) y [`referencias_belady_4marcos.json`](../tests_python/fixtures/referencias_belady_4marcos.json). `page_replacement.py` acepta esos JSON por `--file` o por `stdin`; emite un objeto con FIFO, LRU y OPTIMAL y sus trazas completas. La prueba Go `TestPageReplacementBeladyAnomaly` del endpoint `/api/v1/memory/replace` pasó y verificó los conteos FIFO de 9 y 10 fallos. El handler web actual calcula los algoritmos en Go y devuelve conteos, pero no recibe un patrón de referencias arbitrario ni expone la traza por acceso del script Python. Esa conexión y visualización corresponden al integrante 1; por ello, no se declara cumplida la integración completa del reemplazo en la web.
 
 ## 5. Estado de validación e integración
 
 | Entregable | Evidencia en esta rama | Pendiente externo |
 |---|---|---|
-| Gantt exacto y métricas | Generador SVG y cuatro gráficos del caso documentado | Regenerar y comparar desde la salida C; presentar en la interfaz web |
-| Paginación y segmentación | Oráculo y pruebas de `30480`, `5500` y trap | Contrastar con `memory_paging.c` y el motor de segmentación |
-| Asignación contigua | Caso reproducible de fragmentación externa y dictamen teórico | Comprobar mapa inicial/final y alerta emitidos por C |
-| Reemplazo | FIFO/LRU/Óptimo, tabla, trazas y caso de Belady | Conectar endpoint y mostrar tabla/traza en la web |
+| Gantt exacto y métricas | Diez comparaciones CPU C/oráculo; cuatro trazas C y SVG generados desde ellas; prueba con tiempo inactivo y envejecimiento | Mostrar los SVG en la interfaz web |
+| Paginación y segmentación | Dos ejecutables C comparados con Python: `30480`, `5500` y trap; trazas C conservadas | Ninguno para la auditoría de estos casos |
+| Asignación contigua | Salida C con 6 unidades libres, hueco máximo 2 y alerta, comparada con Python | Ninguno para el caso de fragmentación probado |
+| Reemplazo | FIFO/LRU/Óptimo en Python, tabla, trazas y caso de Belady; prueba Go del conteo FIFO | Conectar el endpoint al script Python y mostrar la traza completa en la web |
 
-**Criterio para cerrar el informe Beta:** sustituir cada pendiente por una salida real del módulo correspondiente, conservar entrada y comando usados, comprobar las diferencias contra los oráculos y actualizar esta tabla. Hasta entonces, el informe documenta la evidencia de QA disponible y las verificaciones por integrar.
+**Criterio para cerrar la integración Beta:** el endpoint de reemplazo debe aceptar el mismo patrón y número de marcos que el script Python, publicar aciertos, fallos y la traza por referencia, y la interfaz debe mostrar los gráficos de Gantt y la tabla/traza de reemplazo. Después se repiten las pruebas de QA con esas salidas web reales y se actualiza esta tabla.
