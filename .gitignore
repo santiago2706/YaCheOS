@@ -43,5 +43,3 @@ go.work.sum
 __pycache__/
 .pytest_cache/
 *.pyc
-cpu_timeline.json
-plan_de_sprints_yakcheos_6_modulos.md
