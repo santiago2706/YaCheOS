@@ -78,6 +78,20 @@ def first_difference(expected, actual, path="$"):
     return None
 
 
+def complete_idle_intervals(segments):
+    """El motor C omite intervalos inactivos; reconstruirlos desde los tiempos emitidos."""
+    timeline = []
+    previous_end = 0
+    for segment in segments:
+        start, end = segment["start"], segment["end"]
+        assert start >= previous_end and end > start, "Traza C solapada o con bloque vacío"
+        if start > previous_end:
+            timeline.append({"pid": 0, "start": previous_end, "end": start})
+        timeline.append({key: segment[key] for key in ("pid", "start", "end")})
+        previous_end = end
+    return timeline
+
+
 @pytest.mark.parametrize("name,processes,algorithm,quantum,aging,expected_wait", CASES, ids=[case[0] for case in CASES])
 def test_c_matches_oracle(binary, tmp_path, name, processes, algorithm, quantum, aging, expected_wait):
     if processes is None:
@@ -88,10 +102,12 @@ def test_c_matches_oracle(binary, tmp_path, name, processes, algorithm, quantum,
     input_file = tmp_path / f"{name}.json"
     output_file = tmp_path / "cpu_timeline.json"
     input_file.write_text(json.dumps(processes), encoding="utf-8")
+    c_algorithm = "PRIORITY_PREEMPTIVE" if algorithm == "PRIORITY_AGING" else algorithm
+    c_aging = aging if algorithm == "PRIORITY_AGING" else 0
     try:
-        completed = subprocess.run([str(binary), "--algo", algorithm, "--file", str(input_file),
-                                    "--quantum", str(quantum), "--aging-interval", str(aging),
-                                    "--output", str(output_file)], capture_output=True, text=True,
+        completed = subprocess.run([str(binary), "--algo", c_algorithm, "--file", str(input_file),
+                                    "--quantum", str(quantum), "--aging", str(c_aging),
+                                    "--out", str(output_file)], capture_output=True, text=True,
                                    check=True, timeout=60)
     except subprocess.CalledProcessError as error:
         pytest.fail(f"{name}: el planificador C terminó con código {error.returncode}:\n{error.stderr}", pytrace=False)
@@ -102,7 +118,28 @@ def test_c_matches_oracle(binary, tmp_path, name, processes, algorithm, quantum,
     actual = json.loads(output_file.read_text(encoding="utf-8"))
     assert actual == json.loads(completed.stdout), "stdout y cpu_timeline.json difieren"
     expected = schedule(processes, algorithm, quantum, aging)
-    assert actual == expected, f"{name}: {first_difference(expected, actual)}"
+    expected_c_algorithm = "PRIORITY_PREEMPTIVE_AGING" if algorithm == "PRIORITY_AGING" else algorithm
+    assert actual["algorithm"] == expected_c_algorithm
+    if algorithm == "RR":
+        assert actual["quantum"] == quantum
+    if algorithm == "PRIORITY_AGING":
+        assert actual["aging_interval"] == aging
+    assert actual["total_time"] == max(row["completion"] for row in expected["processes"])
+    for key in ("waiting_time", "turnaround_time", "response_time"):
+        assert actual[f"average_{key}"] == expected[f"average_{key}"]
+        assert actual["metrics"][f"avg_{key}"] == actual[f"average_{key}"]
+    timeline = complete_idle_intervals(actual["timeline"])
+    assert timeline == expected["timeline"], f"{name}: {first_difference(expected['timeline'], timeline)}"
+    assert all(segment["duration"] == segment["end"] - segment["start"]
+               for segment in actual["timeline"])
+    rows = [{"pid": row["pid"], "arrival_time": row["arrival_time"],
+             "burst_time": row["burst_time"], "priority": row["priority"],
+             "first_start": row["start_time"], "completion": row["completion_time"],
+             "waiting_time": row["waiting_time"], "turnaround_time": row["turnaround_time"],
+             "response_time": row["response_time"]} for row in actual["processes"]]
+    assert rows == expected["processes"], f"{name}: {first_difference(expected['processes'], rows)}"
+    assert all(row["arrival"] == row["arrival_time"] and row["burst"] == row["burst_time"]
+               for row in actual["processes"])
     if expected_wait is not None:
         assert actual["average_waiting_time"] == expected_wait
     if name == "base_rr":
