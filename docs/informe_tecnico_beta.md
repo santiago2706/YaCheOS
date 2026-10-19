@@ -31,7 +31,7 @@ go test ./...
 
 Los binarios locales están ignorados por Git y se deben reconstruir después de cambiar las fuentes C.
 
-Los cuatro `cpu_*.json` son salidas guardadas del planificador C integrado, ejecutado con `--algo`, `--file tests_python/fixtures/procesos_semana4.json`, `--quantum 4` y `--out`. La suite de QA genera archivos temporales `cpu_timeline.json` y compara doce casos C con el oráculo, incluidos el orden de llegadas en RR y el envejecimiento. También comprueba que las cuatro trazas y sus SVG guardados coincidan con el ejecutable actual. El generador de Gantt acepta esos JSON individuales por `--input`.
+Los cuatro `cpu_*.json` son salidas guardadas del planificador C integrado, ejecutado con `--algo`, `--file tests_python/fixtures/procesos_semana4.json`, `--quantum 4` y `--out`. La suite de QA genera archivos temporales `cpu_timeline.json` y compara trece casos C con el oráculo, incluidos el orden de llegadas en RR, el envejecimiento y una traza RR de 600 segmentos. También comprueba que las cuatro trazas y sus SVG guardados coincidan con el ejecutable actual. El generador de Gantt acepta esos JSON individuales por `--input`.
 
 ## 2. Planificación de CPU y Gantt
 
@@ -120,7 +120,7 @@ Las entradas para repetirlo están en [`referencias_belady_3marcos.json`](../tes
 
 | Entregable | Evidencia en esta rama | Pendiente externo |
 |---|---|---|
-| Gantt exacto y métricas | Doce comparaciones CPU C/oráculo; cuatro trazas C y SVG generados desde ellas; prueba con tiempo inactivo y envejecimiento | Mostrar los SVG en la interfaz web |
+| Gantt exacto y métricas | Trece comparaciones CPU C/oráculo; cuatro trazas C y SVG generados desde ellas; pruebas con tiempo inactivo, envejecimiento y 600 segmentos sin truncamiento | Mostrar los SVG en la interfaz web |
 | Paginación y segmentación | Dos ejecutables C comparados con Python: `30480`, `5500` y trap; trazas C conservadas | Ninguno para la auditoría de estos casos |
 | Asignación contigua | Salida C con 6 unidades libres, hueco máximo 2 y alerta, comparada con Python | Ninguno para el caso de fragmentación probado |
 | Reemplazo | FIFO/LRU/Óptimo en Python, tabla, trazas y caso de Belady; prueba Go del conteo FIFO | Conectar el endpoint al script Python y mostrar la traza completa en la web |
