@@ -1,0 +1,10 @@
+{
+  "pid": 100,
+  "page_size_bytes": 4096,
+  "virtual_address": 10000,
+  "page_number": 2,
+  "frame_number": 7,
+  "offset": 1808,
+  "physical_address": 30480,
+  "status": "OK"
+}

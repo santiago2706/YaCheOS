@@ -1,0 +1,6 @@
+{
+  "segment": 1,
+  "offset": 900,
+  "physical_address": null,
+  "status": "EXCEPTION_SEGMENTATION_FAULT"
+}

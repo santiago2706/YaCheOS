@@ -1,0 +1,13 @@
+{
+  "total_size_kb": 10,
+  "total_free_kb": 6,
+  "external_fragmentation": true,
+  "alert": "EXTERNAL_FRAGMENTATION: Solicitud de 3 unidades rechazada pese a tener 6 unidades libres totales en huecos no contiguos.",
+  "blocks": [
+    {"start": 0, "size": 2, "pid": -1, "free": true},
+    {"start": 2, "size": 2, "pid": 2, "free": false},
+    {"start": 4, "size": 2, "pid": -1, "free": true},
+    {"start": 6, "size": 2, "pid": 4, "free": false},
+    {"start": 8, "size": 2, "pid": -1, "free": true}
+  ]
+}
