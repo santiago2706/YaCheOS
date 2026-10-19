@@ -176,3 +176,49 @@ func (dp *DiningPhilosophers) CheckDeadlock() (bool, []int) {
 	report := DetectRAGCycle(dp)
 	return report.Deadlock, report.Cycle
 }
+
+// PhilosopherSnapshot representa una instantánea segura del estado en un instante t.
+type PhilosopherSnapshot struct {
+	Count      int
+	States     []PhilosopherState
+	ForksOwner []int
+	Mode       string
+	EatCount   []int
+	Deadlock   bool
+	Cycle      []int
+}
+
+// GetSnapshotAndReport obtiene una copia de los arreglos bajo mutex y luego
+// construye el reporte RAG analizando la copia para garantizar consistencia absoluta.
+func (dp *DiningPhilosophers) GetSnapshotAndReport() (PhilosopherSnapshot, DeadlockReport) {
+	dp.Mu.Lock()
+
+	// 1. Copiamos el estado para evitar bloqueos y race-conditions en el JSON Encoder
+	dpCopy := &DiningPhilosophers{
+		Count:      dp.Count,
+		Mode:       dp.Mode,
+		States:     make([]PhilosopherState, dp.Count),
+		ForksOwner: make([]int, dp.Count),
+		EatCount:   make([]int, dp.Count),
+	}
+	copy(dpCopy.States, dp.States)
+	copy(dpCopy.ForksOwner, dp.ForksOwner)
+	copy(dpCopy.EatCount, dp.EatCount)
+
+	dp.Mu.Unlock() // Liberamos INMEDIATAMENTE para que la simulación continúe
+
+	// 2. Ejecutamos el motor de detección de ciclos RAG sobre la copia congelada
+	report := DetectRAGCycle(dpCopy)
+
+	snap := PhilosopherSnapshot{
+		Count:      dpCopy.Count,
+		States:     dpCopy.States,
+		ForksOwner: dpCopy.ForksOwner,
+		Mode:       dpCopy.Mode,
+		EatCount:   dpCopy.EatCount,
+		Deadlock:   report.Deadlock,
+		Cycle:      report.Cycle,
+	}
+
+	return snap, report
+}

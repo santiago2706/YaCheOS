@@ -13,12 +13,14 @@ import (
 	"strings"
 	"time"
 
+	"sync"
 	syncgo "yakcheos/src/sync_go"
 )
 
 // CoreHandlers gestiona los endpoints de integración con los motores C y Go.
 type CoreHandlers struct {
 	baseDir      string
+	mu           sync.RWMutex // Protege el reemplazo de los punteros de simulación
 	philosophers *syncgo.DiningPhilosophers
 	buffer       *syncgo.BoundedBuffer
 }
@@ -462,21 +464,28 @@ func (h *CoreHandlers) HandlePageReplacement(w http.ResponseWriter, r *http.Requ
 func (h *CoreHandlers) HandleSyncStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	deadlock, cycle := h.philosophers.CheckDeadlock()
-	rag := syncgo.DetectRAGCycle(h.philosophers)
+	// Obtenemos los punteros de simulación de forma segura
+	h.mu.RLock()
+	dp := h.philosophers
+	bb := h.buffer
+	h.mu.RUnlock()
 
-	count, items, mutexVal, emptyVal, fullVal := h.buffer.GetState()
+	// 1. Snapshot de filósofos: Copia segura de arreglos y cálculo de RAG en la misma foto
+	snap, rag := dp.GetSnapshotAndReport()
+
+	// 2. Snapshot de buffer: GetState y GetEvents ya devuelven copias profundas (Deep Copy)
+	count, items, mutexVal, emptyVal, fullVal := bb.GetState()
 
 	res := map[string]any{
 		"philosophers": map[string]any{
-			"count":       h.philosophers.Count,
-			"states":      h.philosophers.States,
-			"forks_owner": h.philosophers.ForksOwner,
-			"mode":        h.philosophers.Mode,
-			"deadlock":    deadlock,
-			"cycle":       cycle,
+			"count":       snap.Count,
+			"states":      snap.States,
+			"forks_owner": snap.ForksOwner,
+			"mode":        snap.Mode,
+			"deadlock":    snap.Deadlock,
+			"cycle":       snap.Cycle,
 			"rag_report":  rag,
-			"eat_count":   h.philosophers.EatCount,
+			"eat_count":   snap.EatCount,
 		},
 		"prod_cons": map[string]any{
 			"capacity":   5,
@@ -487,7 +496,7 @@ func (h *CoreHandlers) HandleSyncStatus(w http.ResponseWriter, r *http.Request) 
 				"vacios": emptyVal,
 				"llenos": fullVal,
 			},
-			"events": h.buffer.GetEvents(),
+			"events": bb.GetEvents(),
 		},
 	}
 
@@ -500,27 +509,33 @@ func (h *CoreHandlers) HandleSyncStep(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	mode := r.URL.Query().Get("mode")
-	if mode != "" {
-		h.philosophers.SetMode(mode)
-	}
-
 	actor := r.URL.Query().Get("actor")
 	action := r.URL.Query().Get("action")
+
+	// Usamos RLock para permitir concurrencia masiva en operaciones normales
+	h.mu.RLock()
+	dp := h.philosophers
+	bb := h.buffer
+	h.mu.RUnlock()
+
+	if mode != "" {
+		dp.SetMode(mode)
+	}
 
 	if actor == "philosopher" {
 		idStr := r.URL.Query().Get("id")
 		id, err := strconv.Atoi(idStr)
-		if err == nil && id >= 0 && id < h.philosophers.Count {
-			h.philosophers.StepPhilosopher(id)
+		if err == nil && id >= 0 && id < dp.Count {
+			dp.StepPhilosopher(id)
 		} else {
-			for i := 0; i < h.philosophers.Count; i++ {
-				h.philosophers.StepPhilosopher(i)
+			for i := 0; i < dp.Count; i++ {
+				dp.StepPhilosopher(i)
 			}
 		}
 	} else if action == "produce" {
 		done := make(chan struct{})
 		go func() {
-			h.buffer.Produce(1, int(time.Now().Unix()%1000))
+			bb.Produce(1, int(time.Now().Unix()%1000))
 			close(done)
 		}()
 		select {
@@ -530,7 +545,7 @@ func (h *CoreHandlers) HandleSyncStep(w http.ResponseWriter, r *http.Request) {
 	} else if action == "consume" {
 		done := make(chan struct{})
 		go func() {
-			h.buffer.Consume(1)
+			bb.Consume(1)
 			close(done)
 		}()
 		select {
@@ -538,8 +553,12 @@ func (h *CoreHandlers) HandleSyncStep(w http.ResponseWriter, r *http.Request) {
 		case <-time.After(25 * time.Millisecond):
 		}
 	} else if action == "reset" {
+		// Aquí sí requerimos Lock completo (Write) para cambiar la simulación
+		h.mu.Lock()
+		h.buffer.StopPending() // Aborta las goroutines atrapadas del buffer anterior
 		h.philosophers = syncgo.NewDiningPhilosophers(h.philosophers.Mode)
 		h.buffer = syncgo.NewBoundedBuffer(5)
+		h.mu.Unlock()
 	}
 
 	h.HandleSyncStatus(w, r)
