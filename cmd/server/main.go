@@ -43,11 +43,16 @@ func setupRouter(webDir, dataDir, baseDir string) http.Handler {
 		fsData := http.StripPrefix("/data/", http.FileServer(http.Dir(dataDir)))
 		mux.Handle("/data/", fsData)
 	}
+	mux.Handle("/docs/gantt/", http.StripPrefix("/docs/gantt/", http.FileServer(http.Dir(filepath.Join(baseDir, "docs", "gantt")))))
 
 	// Endpoints de Integración M1 y M3 (Sprint 2 - T1.4)
 	mux.HandleFunc("/api/v1/cpu/schedule", core.HandleCPUSchedule)
+	mux.HandleFunc("/api/v1/process/demo", core.HandleProcessDemo)
+	mux.HandleFunc("/api/v1/thread/demo", core.HandleThreadDemo)
+	mux.HandleFunc("/api/v1/simulation", core.HandleTaskSimulation)
 	mux.HandleFunc("/api/v1/memory/translate", core.HandleMemoryTranslate)
-	mux.HandleFunc("/api/v1/memory/replace", core.HandlePageReplacement)
+	mux.HandleFunc("/api/v1/memory/replace", core.HandlePageReplacementIntegrated)
+	mux.HandleFunc("/api/v1/memory/map", core.HandleMemoryMap)
 
 	// Endpoints de Sincronización M2 (Sprint 2 - T1.6)
 	mux.HandleFunc("/api/v1/sync/status", core.HandleSyncStatus)
