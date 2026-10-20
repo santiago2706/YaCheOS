@@ -7,6 +7,13 @@
 *.dll
 *.so
 *.dylib
+/server
+*.o
+bin/
+
+# Simulation runtime artifacts
+cpu_timeline.json
+
 
 # Test binary, built with `go test -c`
 *.test
@@ -31,3 +38,8 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Python y salidas locales del simulador
+__pycache__/
+.pytest_cache/
+*.pyc
