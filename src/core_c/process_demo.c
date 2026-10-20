@@ -20,9 +20,8 @@ int main(void) {
         printf("  \"parent_pid\": %d,\n", (int)getppid());
         fflush(stdout);
 
-        char *args[] = {"echo", "  \"child_message\": \"Subproceso real ejecutado con execvp y recolectado sin zombies\",", NULL};
-        execvp(args[0], args);
-        perror("Error en execvp");
+        execl("/bin/echo", "echo", "  \"child_message\": \"Subproceso real ejecutado con exec y recolectado sin zombies\",", (char *)NULL);
+        perror("Error en execl");
         _exit(EXIT_FAILURE);
     } else {
         /* Proceso Padre */
@@ -38,6 +37,7 @@ int main(void) {
         printf("  \"zombie_prevented\": true,\n");
         printf("  \"note\": \"PID anfitrion gestionado por kernel Linux; PCB de YaCheOS es determinista en espacio de usuario.\"\n");
         printf("}\n");
+        if (exit_code != 0) return EXIT_FAILURE;
     }
 
     return EXIT_SUCCESS;
