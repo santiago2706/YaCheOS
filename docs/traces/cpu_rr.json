@@ -1,0 +1,28 @@
+{
+  "algorithm": "RR",
+  "total_time": 22,
+  "average_waiting_time": 9.25,
+  "average_turnaround_time": 14.75,
+  "average_response_time": 4.00,
+  "quantum": 4,
+  "timeline": [
+    {"pid": 1, "name": "P1", "start": 0, "end": 4, "duration": 4},
+    {"pid": 2, "name": "P2", "start": 4, "end": 7, "duration": 3},
+    {"pid": 3, "name": "P3", "start": 7, "end": 11, "duration": 4},
+    {"pid": 4, "name": "P4", "start": 11, "end": 15, "duration": 4},
+    {"pid": 1, "name": "P1", "start": 15, "end": 16, "duration": 1},
+    {"pid": 3, "name": "P3", "start": 16, "end": 20, "duration": 4},
+    {"pid": 4, "name": "P4", "start": 20, "end": 22, "duration": 2}
+  ],
+  "processes": [
+    {"pid": 1, "name": "P1", "arrival_time": 0, "burst_time": 5, "arrival": 0, "burst": 5, "memory_kb": 128, "priority": 3, "start_time": 0, "completion_time": 16, "waiting_time": 11, "turnaround_time": 16, "response_time": 0},
+    {"pid": 2, "name": "P2", "arrival_time": 1, "burst_time": 3, "arrival": 1, "burst": 3, "memory_kb": 64, "priority": 4, "start_time": 4, "completion_time": 7, "waiting_time": 3, "turnaround_time": 6, "response_time": 3},
+    {"pid": 3, "name": "P3", "arrival_time": 2, "burst_time": 8, "arrival": 2, "burst": 8, "memory_kb": 256, "priority": 1, "start_time": 7, "completion_time": 20, "waiting_time": 10, "turnaround_time": 18, "response_time": 5},
+    {"pid": 4, "name": "P4", "arrival_time": 3, "burst_time": 6, "arrival": 3, "burst": 6, "memory_kb": 128, "priority": 2, "start_time": 11, "completion_time": 22, "waiting_time": 13, "turnaround_time": 19, "response_time": 8}
+  ],
+  "metrics": {
+    "avg_waiting_time": 9.25,
+    "avg_turnaround_time": 14.75,
+    "avg_response_time": 4.00
+  }
+}
