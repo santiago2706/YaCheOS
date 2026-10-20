@@ -39,6 +39,12 @@ memory_cli$(EXE): $(ENGINE_SRCS) pcb.h
 $(BUILD_DIR)/core_engine$(EXE): $(ENGINE_SRCS) pcb.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -DCORE_ENGINE_UNIFIED -o $@ $(ENGINE_SRCS)
 
+$(BUILD_DIR)/core_test$(EXE): main_test.c queue.c memory_contigous.c pcb.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -o $@ main_test.c queue.c memory_contigous.c
+
+test: $(BUILD_DIR)/core_test$(EXE)
+	$(BUILD_DIR)/core_test$(EXE)
+
 clean:
 	rm -f process_demo scheduler memory_cli cpu_timeline.json
 	rm -rf $(BUILD_DIR)/core_engine

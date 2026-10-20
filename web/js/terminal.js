@@ -100,7 +100,7 @@ class TerminalCLI {
           this.appendEntry(rawCmd, `<span class="term-rose">mkdir: falta el operando de directorio. Uso: mkdir &lt;nombre&gt;</span>`);
         } else {
           this.appendEntry(rawCmd, `
-<span class="term-green">Directorio simulado '${this.escapeHtml(args[0])}' registrado.</span>
+<span class="term-amber">Sintaxis de mkdir reconocida para '${this.escapeHtml(args[0])}'; no se creó un directorio.</span>
 <div class="term-gray">[Aviso VFS]: La persistencia en disco virtual se habilitara con el VFS en Sprint 3.</div>
 `);
         }
@@ -111,7 +111,7 @@ class TerminalCLI {
         break;
 
       case 'uname':
-        this.appendEntry(rawCmd, `<span class="term-cyan">YaKcheOS 0.1.0-alpha #1 SMP PREEMPT 2026 x86_64 UNI-FIIS GNU/Linux</span>`);
+        this.appendEntry(rawCmd, `<span class="term-cyan">YaKcheOS v0.5.0-beta — simulador educativo UNI-FIIS</span>`);
         break;
 
       case 'date':
@@ -245,9 +245,10 @@ class TerminalCLI {
 
   async handlePsCommand(rawCmd) {
     try {
-      const res = await fetch('/data/procesos_semana4.json');
+      const res = await fetch('/api/v1/simulation');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const list = Array.isArray(data) ? data : (data.procesos || []);
+      const list = data.processes || [];
 
       let rows = '';
       list.forEach((p) => {
@@ -256,12 +257,12 @@ class TerminalCLI {
         const arr = p.arrival_time !== undefined ? p.arrival_time : p.llegada;
         const burst = p.burst_time !== undefined ? p.burst_time : p.rafaga;
         const prio = p.priority !== undefined ? p.priority : p.prioridad;
-        const mem = p.memory_kb ? p.memory_kb + 'KB' : '128KB';
+        const mem = p.memory_kb + 'KB';
         rows += `
           <tr>
             <td>${pid}</td>
-            <td><span class="term-cyan">${name}</span></td>
-            <td>READY</td>
+            <td><span class="term-cyan">${this.escapeHtml(name)}</span></td>
+            <td>${p.state}</td>
             <td>${arr}m</td>
             <td>${burst}m</td>
             <td>${prio}</td>
@@ -319,14 +320,14 @@ class TerminalCLI {
 
       let ganttStr = '';
       if (data.timeline && data.timeline.length > 0) {
-        ganttStr = data.timeline.map(t => `[${t.start}]--${t.name}(${t.duration}m)--[${t.end}]`).join('');
+        ganttStr = data.timeline.map(t => `[${t.start}]--${this.escapeHtml(t.name)}(${t.duration}m)--[${t.end}]`).join('');
       }
 
       let rows = '';
       if (data.processes && data.processes.length > 0) {
         data.processes.forEach(p => {
           rows += `<tr>
-            <td>${p.name} (PID ${p.pid})</td>
+            <td>${this.escapeHtml(p.name)} (PID ${p.pid})</td>
             <td>${p.waiting_time} min</td>
             <td>${p.turnaround_time} min</td>
             <td>${p.response_time !== undefined ? p.response_time + ' min' : '-'}</td>
@@ -358,24 +359,27 @@ class TerminalCLI {
         window.osManager.openWindow('win-tasks');
       }
       if (window.taskManager) {
-        const select = document.getElementById('select-sim-algo');
-        if (select) select.value = algo;
-        window.taskManager.currentAlgo = algo;
-        await window.taskManager.fetchScheduleData();
-        window.taskManager.reset();
+        if (file === 'data/procesos_semana4.json' && quantum === '4') {
+          const select = document.getElementById('select-sim-algo');
+          if (select) select.value = algo;
+          window.taskManager.currentAlgo = algo;
+          await window.taskManager.reset();
+        } else {
+          this.appendEntry(rawCmd, '<span class="term-gray">El Task Manager conserva su contrato base; el resultado solicitado se muestra arriba.</span>');
+        }
       }
     } catch (err) {
       this.appendEntry(rawCmd, `<span class="term-rose">Fallo de conexion con API /api/v1/cpu/schedule: ${this.escapeHtml(err.message)}</span>`);
     }
   }
 
-  handleKillCommand(rawCmd, args) {
+  async handleKillCommand(rawCmd, args) {
     if (args.length === 0) {
       this.appendEntry(rawCmd, `<span class="term-rose">Uso: kill &lt;PID&gt;</span>`);
       return;
     }
-    const pid = parseInt(args[0], 10);
-    if (isNaN(pid)) {
+    const pid = Number(args[0]);
+    if (!Number.isInteger(pid) || pid < 1) {
       this.appendEntry(rawCmd, `<span class="term-rose">kill: argumento PID inválido: '${this.escapeHtml(args[0])}'</span>`);
       return;
     }
@@ -386,11 +390,12 @@ class TerminalCLI {
         return;
       }
       if (p.state === 'TERMINATED') {
-        this.appendEntry(rawCmd, `<span class="term-amber">kill: el proceso ${p.name} (PID ${pid}) ya se encuentra TERMINATED.</span>`);
+        this.appendEntry(rawCmd, `<span class="term-amber">kill: el proceso ${this.escapeHtml(p.name)} (PID ${pid}) ya se encuentra TERMINATED.</span>`);
         return;
       }
-      window.taskManager.killProcess(pid);
-      this.appendEntry(rawCmd, `<span class="term-green">[SIGTERM] Proceso ${p.name} (PID ${pid}) terminado exitosamente. Bloque de memoria liberado y huecos contiguos fusionados.</span>`);
+      const success = await window.taskManager.killProcess(pid);
+      if (success) this.appendEntry(rawCmd, `<span class="term-green">[SIGTERM] Proceso ${this.escapeHtml(p.name)} (PID ${pid}) terminado. El asignador C liberó su bloque de memoria.</span>`);
+      else this.appendEntry(rawCmd, `<span class="term-rose">kill: no se pudo terminar el proceso ${pid}; revisa el Task Manager.</span>`);
     } else {
       this.appendEntry(rawCmd, `<span class="term-rose">Task Manager no inicializado.</span>`);
     }
@@ -528,10 +533,6 @@ class TerminalCLI {
       this.appendEntry(rawCmd, `<span class="term-rose">Error sync: ${this.escapeHtml(err.message)}</span>`);
     }
   }
-      window.osManager.refreshProcessesTable();
-    }
-  }
-
   async handleCatCommand(rawCmd, args) {
     if (args.length === 0) {
       this.appendEntry(rawCmd, `<span class="term-rose">cat: falta el nombre del archivo. Uso: cat &lt;archivo&gt;</span>`);

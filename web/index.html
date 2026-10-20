@@ -71,7 +71,7 @@
    \ V / (_| | . \| | | | | |_| | |_| | |_| |___) |
     \_/ \__,_|_|\_\_| |_|_|\__,_|\__, |\___/|____/ 
                                  |___/              </pre>
-              <div>YaKcheOS Terminal Simulator [Version 0.1.0-alpha]</div>
+              <div>YaKcheOS Terminal Simulator [Version v0.5.0-beta]</div>
               <div>(c) 2026 UNI FIIS - Escuela de Ingenieria de Software.</div>
               <div>Escribe <span class="term-cyan">help</span> para consultar los comandos disponibles del laboratorio.</div>
             </div>
@@ -138,9 +138,15 @@
               </div>
               <div class="sim-badge-info" style="color: #fbbf24; border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.1);">
                 <span>W_prom:</span>
-                <span id="sim-w-prom">5.75m</span>
+                <span id="sim-w-prom">—</span>
               </div>
             </div>
+          </div>
+
+          <div class="sim-controls-group" style="margin:8px 0;">
+            <button id="btn-process-demo" class="sim-btn">Demostrar fork/exec</button>
+            <button id="btn-thread-demo" class="sim-btn">Demostrar 2 hilos</button>
+            <output id="demo-trace" style="font-family:var(--font-mono); font-size:0.72rem; white-space:pre-wrap;"></output>
           </div>
 
           <!-- Tabla en vivo de procesos con columnas ordenables (T1.5) -->
@@ -168,18 +174,13 @@
             <div class="memory-map-header">
               <span style="font-weight: 700; color: #f8fafc;">🗺️ Mapa Gráfico de Bloques de Memoria (RAM - 1024 KB Contiguos)</span>
               <span style="color: #38bdf8; font-family: var(--font-mono); font-size: 0.74rem;">
-                En Uso: <strong id="mem-used-txt">576 KB</strong> | Hueco Libre: <strong id="mem-free-txt">448 KB</strong>
+                En Uso: <strong id="mem-used-txt">—</strong> | Hueco Libre: <strong id="mem-free-txt">—</strong>
               </span>
             </div>
             <div class="memory-map-bar" id="memory-map-bar">
               <!-- Bloques dinámicos renderizados por app.js -->
             </div>
             <div class="memory-legend" id="memory-map-legend">
-              <div class="mem-legend-item"><div class="mem-legend-color" style="background:#3b82f6;"></div><span>P1 (128 KB)</span></div>
-              <div class="mem-legend-item"><div class="mem-legend-color" style="background:#10b981;"></div><span>P2 (64 KB)</span></div>
-              <div class="mem-legend-item"><div class="mem-legend-color" style="background:#f59e0b;"></div><span>P3 (256 KB)</span></div>
-              <div class="mem-legend-item"><div class="mem-legend-color" style="background:#8b5cf6;"></div><span>P4 (128 KB)</span></div>
-              <div class="mem-legend-item"><div class="mem-legend-color" style="background:rgba(71,85,105,0.6);"></div><span>Hueco Libre (448 KB)</span></div>
             </div>
           </div>
 
@@ -187,14 +188,11 @@
           <div class="gantt-preview-container" style="margin-top: 12px;">
             <div style="display: flex; justify-content: space-between; font-size: 0.78rem;">
               <span style="font-weight: 600; color: #cbd5e1;">Línea de Tiempo de Ejecución (Gantt - Semana 4)</span>
-              <span id="gantt-summary-txt" style="color: #38bdf8; font-family: var(--font-mono);">FCFS: P1(5m) &rarr; P2(3m) &rarr; P3(8m) &rarr; P4(6m) | Duración: 22 min</span>
+              <span id="gantt-summary-txt" style="color: #38bdf8; font-family: var(--font-mono);">Cargando salida del planificador C…</span>
             </div>
             <div class="gantt-bar" id="gantt-bar">
-              <div class="gantt-segment" style="flex: 5; background: #3b82f6;" title="P1: [0-5]">P1 (5m)</div>
-              <div class="gantt-segment" style="flex: 3; background: #10b981;" title="P2: [5-8]">P2 (3m)</div>
-              <div class="gantt-segment" style="flex: 8; background: #f59e0b;" title="P3: [8-16]">P3 (8m)</div>
-              <div class="gantt-segment" style="flex: 6; background: #8b5cf6;" title="P4: [16-22]">P4 (6m)</div>
             </div>
+            <img id="gantt-figure" alt="Gantt generado a partir de la traza C, con esperas y métricas" style="width:100%; margin-top:10px; border-radius:8px;" hidden>
           </div>
         </div>
       </div>
@@ -321,11 +319,7 @@
                   <input type="number" id="input-mmu-virtual" class="sim-select" value="10000" style="width: 100px;" placeholder="Dir. Virtual">
                   <button id="btn-calc-mmu" class="sim-btn sim-btn-primary">Traducir</button>
                 </div>
-                <div id="mmu-result-box" style="font-family: var(--font-mono); font-size: 0.72rem; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px;">
-                  <div>Página: <span style="color:#38bdf8;">2</span> (Marco: <span style="color:#34d399;">7</span>)</div>
-                  <div>Desplazamiento: <span style="color:#fbbf24;">1808</span></div>
-                  <div>Dirección Física: <strong style="color:#34d399; font-size: 0.85rem;">30480</strong></div>
-                </div>
+                <div id="mmu-result-box" style="font-family: var(--font-mono); font-size: 0.72rem; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px;">Pulsa Traducir para ejecutar C.</div>
               </div>
 
               <!-- 2. Segmentación con Base y Límite & Trap Detection (T2.6 / T1.4) -->
@@ -345,25 +339,20 @@
                   <button id="btn-test-seg-valid" class="sim-btn" style="font-size:0.65rem; padding: 2px 4px;">Válido (1, 300)</button>
                   <button id="btn-test-seg-trap" class="sim-btn" style="font-size:0.65rem; padding: 2px 4px; color:#f87171; border-color:rgba(248,113,113,0.4);">Trap (1, 900)</button>
                 </div>
-                <div id="seg-result-box" style="font-family: var(--font-mono); font-size: 0.72rem; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px;">
-                  <div>Segmento: <span style="color:#38bdf8;">Datos (ID: 1)</span></div>
-                  <div>Base: 5200 | Límite: 800</div>
-                  <div>Dirección Física: <strong style="color:#34d399; font-size: 0.85rem;">5500</strong></div>
-                </div>
+                <div id="seg-result-box" style="font-family: var(--font-mono); font-size: 0.72rem; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px;">Pulsa OK para ejecutar C.</div>
               </div>
 
               <!-- 3. Reemplazo de Páginas y Belady -->
               <div class="about-card" style="margin-top: 0;">
                 <h5 style="color: #a78bfa;">3. Reemplazo (Belády)</h5>
-                <p style="margin-bottom: 8px;">Patrón: <code>1,2,3,4,1,2,5,1,2,3,4,5</code></p>
+                <label for="input-replace-pages">Referencias (separadas por comas)</label>
+                <input id="input-replace-pages" class="sim-select" value="1,2,3,4,1,2,5,1,2,3,4,5" style="width:100%; margin:6px 0;" aria-label="Patrón de referencias">
+                <label for="input-replace-frames">Marcos</label>
+                <input type="number" min="1" max="256" id="input-replace-frames" class="sim-select" value="3" style="width:70px; margin:6px;">
                 <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-                  <button id="btn-calc-replace" class="sim-btn sim-btn-primary">Comparar Fallos</button>
+                  <button id="btn-calc-replace" class="sim-btn sim-btn-primary">Comparar y ver trazas</button>
                 </div>
-                <div id="replace-result-box" style="font-family: var(--font-mono); font-size: 0.72rem; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px;">
-                  <div>FIFO (3 marcos): <strong style="color:#f87171;">9 fallos</strong></div>
-                  <div>FIFO (4 marcos): <strong style="color:#ef4444;">10 fallos</strong> (¡Belády!)</div>
-                  <div>Óptimo (3 marcos): <strong style="color:#34d399;">7 fallos</strong></div>
-                </div>
+                <div id="replace-result-box" style="font-family: var(--font-mono); font-size: 0.72rem; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; max-height:280px; overflow:auto;">Pulsa Comparar para ejecutar Python.</div>
               </div>
             </div>
           </div>
@@ -387,7 +376,7 @@
           <span>ℹ️ Acerca de YaKcheOS</span>
         </div>
         <div class="window-actions-right">
-          <span>v0.1.0-alpha</span>
+          <span>v0.5.0-beta</span>
         </div>
       </div>
 
@@ -492,7 +481,7 @@
   </footer>
 
   <!-- Scripts -->
-  <script src="js/app.js"></script>
-  <script src="js/terminal.js"></script>
+  <script src="js/app.js?v=beta-state-2"></script>
+  <script src="js/terminal.js?v=beta-state-2"></script>
 </body>
 </html>

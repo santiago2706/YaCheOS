@@ -94,12 +94,55 @@ static void run_contiguous_Processes_case(const char *fit_mode) {
     print_contiguous_json(&mem);
 }
 
+static bool pid_is_listed(int pid, const char *csv) {
+    if (!csv || !*csv) return false;
+    const char *cursor = csv;
+    while (*cursor) {
+        char *end = NULL;
+        long candidate = strtol(cursor, &end, 10);
+        if (end == cursor || (candidate < 1 || candidate > 2147483647L)) return false;
+        if (candidate == pid) return true;
+        if (*end == '\0') break;
+        if (*end != ',') return false;
+        cursor = end + 1;
+    }
+    return false;
+}
+
+static int run_process_map(const char *file, const char *fit, const char *released) {
+    Process processes[MAX_PROCESSES];
+    int count = load_processes_from_json(file, processes, MAX_PROCESSES);
+    if (count <= 0) return EXIT_FAILURE;
+    ContiguousMemory mem;
+    mem_init(&mem, 1024);
+    for (int i = 0; i < count; i++) {
+        if (processes[i].memory_kb <= 0) {
+            fprintf(stderr, "Invalid memory size for PID %d\n", processes[i].pid);
+            return EXIT_FAILURE;
+        }
+        bool ok = strcmp(fit, "BEST") == 0
+            ? alloc_best_fit(&mem, processes[i].pid, processes[i].memory_kb)
+            : alloc_first_fit(&mem, processes[i].pid, processes[i].memory_kb);
+        if (!ok) {
+            fprintf(stderr, "Memory allocation failed for PID %d\n", processes[i].pid);
+            return EXIT_FAILURE;
+        }
+    }
+    for (int i = 0; i < count; i++) {
+        if (pid_is_listed(processes[i].pid, released)) free_memory(&mem, processes[i].pid);
+    }
+    print_contiguous_json(&mem);
+    return EXIT_SUCCESS;
+}
+
 int main(int argc, char *argv[]) {
     const char *mode = "paging";
     const char *fit = "FIRST";
     int vaddr = 10000;
     int seg_id = 1;
     int offset = 300;
+    const char *file = "data/procesos_semana4.json";
+    const char *released = "";
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--mode") == 0 && i + 1 < argc) {
@@ -112,6 +155,10 @@ int main(int argc, char *argv[]) {
             offset = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--fit") == 0 && i + 1 < argc) {
             fit = argv[++i];
+        } else if (strcmp(argv[i], "--file") == 0 && i + 1 < argc) {
+            file = argv[++i];
+        } else if (strcmp(argv[i], "--released") == 0 && i + 1 < argc) {
+            released = argv[++i];
         } else if (strcmp(argv[i], "--algo") == 0) {
             /* Si se invoca core_engine como planificador de CPU */
             const char *algo = "FCFS";
@@ -155,6 +202,8 @@ int main(int argc, char *argv[]) {
         run_fragmentation_case();
     } else if (strcmp(mode, "contiguous") == 0) {
         run_contiguous_Processes_case(fit);
+    } else if (strcmp(mode, "process-map") == 0) {
+        return run_process_map(file, fit, released);
     } else {
         fprintf(stderr, "{\"error\": \"Modo de memoria desconocido: %s\"}\n", mode);
         return EXIT_FAILURE;

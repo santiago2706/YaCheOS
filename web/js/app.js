@@ -515,15 +515,14 @@ class TaskManager {
     this.timeline = [];
     this.totalRamKb = 1024;
     this.memoryBlocks = [];
+    this.releasedPids = new Set();
 
     this.init();
   }
 
   async init() {
     this.bindEvents();
-    await this.fetchScheduleData();
-    this.initMemoryBlocks();
-    this.render();
+    await this.loadState();
   }
 
   bindEvents() {
@@ -544,8 +543,25 @@ class TaskManager {
     if (selectAlgo) {
       selectAlgo.addEventListener('change', async (e) => {
         this.currentAlgo = e.target.value;
-        await this.fetchScheduleData();
-        this.reset();
+        await this.reset();
+      });
+    }
+
+    for (const [id, path] of [
+      ['btn-process-demo', '/api/v1/process/demo'],
+      ['btn-thread-demo', '/api/v1/thread/demo'],
+    ]) {
+      const button = document.getElementById(id);
+      if (!button) continue;
+      button.addEventListener('click', async () => {
+        const output = document.getElementById('demo-trace');
+        try {
+          const res = await fetch(path);
+          const data = await res.json();
+          output.textContent = res.ok ? JSON.stringify(data, null, 2) : data.error;
+        } catch (err) {
+          output.textContent = `No se pudo ejecutar la demostración: ${err.message}`;
+        }
       });
     }
 
@@ -565,67 +581,69 @@ class TaskManager {
     });
   }
 
-  async fetchScheduleData() {
+  applyState(state) {
+    this.currentAlgo = state.algorithm;
+    this.currentTick = state.tick;
+    this.timeline = state.timeline || [];
+    this.processes = state.processes.map((p) => ({
+      pid: p.pid, name: p.name, arrival: p.arrival_time, burst: p.burst_time,
+      remaining: p.remaining, priority: p.priority, memory: p.memory_kb, state: p.state,
+    }));
+    this.sortProcesses();
+    this.totalRamKb = state.memory.total_size_kb;
+    this.memoryBlocks = state.memory.blocks.map((block) => ({
+      ...block, name: block.free ? 'LIBRE' : `P${block.pid}`,
+      color: ({ 1: '#3b82f6', 2: '#10b981', 3: '#f59e0b', 4: '#8b5cf6' })[block.pid] || '#06b6d4',
+    }));
+    const tick = document.getElementById('sim-tick-count');
+    if (tick) tick.textContent = state.tick;
+    const cpu = document.getElementById('sim-cpu-status');
+    if (cpu) {
+      const running = this.processes.find((p) => p.state === 'RUNNING');
+      cpu.textContent = running ? `${running.name} [PID ${running.pid}]`
+        : this.processes.every((p) => p.state === 'TERMINATED') ? 'COMPLETADO' : 'READY';
+    }
+    const waiting = document.getElementById('sim-w-prom');
+    if (waiting) waiting.textContent = `${state.metrics.average_waiting_time}m`;
+    const summary = document.getElementById('gantt-summary-txt');
+    if (summary) summary.textContent = `${state.algorithm}: W_prom ${state.metrics.average_waiting_time} min | T_prom ${state.metrics.average_turnaround_time} min | R_prom ${state.metrics.average_response_time} min`;
+    const figure = document.getElementById('gantt-figure');
+    if (figure) {
+      figure.hidden = state.modified;
+      figure.src = `/docs/gantt/gantt_${state.algorithm === 'PRIORIDAD' ? 'priority' : state.algorithm.toLowerCase()}.svg`;
+    }
+    this.renderGantt(this.timeline);
+    this.render();
+    if (this.isRunning && this.processes.every((p) => p.state === 'TERMINATED')) this.togglePlay();
+  }
+
+  async loadState() {
     try {
-      const res = await fetch(`/api/v1/cpu/schedule?algo=${this.currentAlgo}`);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      this.timeline = data.timeline || [];
-
-      // Actualizar métricas del dashboard
-      const wEl = document.getElementById('sim-w-prom');
-      if (wEl) wEl.textContent = `${data.average_waiting_time}m`;
-
-      const gTxt = document.getElementById('gantt-summary-txt');
-      if (gTxt) {
-        gTxt.textContent = `${this.currentAlgo}: W_prom ${data.average_waiting_time} min | T_prom ${data.average_turnaround_time} min`;
-      }
-
-      this.renderGantt(this.timeline);
-    } catch (err) {
-      console.warn('Fallo al invocar /api/v1/cpu/schedule:', err);
+      const response = await fetch('/api/v1/simulation');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      this.applyState(await response.json());
+    } catch (error) {
+      const summary = document.getElementById('gantt-summary-txt');
+      if (summary) summary.textContent = `No se pudo iniciar la simulación C: ${error.message}`;
     }
   }
 
-  initMemoryBlocks() {
-    // Procesos base de Semana 4
-    this.processes = [
-      { pid: 1, name: 'P1', arrival: 0, burst: 5, remaining: 5, priority: 3, memory: 128, state: 'READY' },
-      { pid: 2, name: 'P2', arrival: 1, burst: 3, remaining: 3, priority: 4, memory: 64,  state: 'READY' },
-      { pid: 3, name: 'P3', arrival: 2, burst: 8, remaining: 8, priority: 1, memory: 256, state: 'READY' },
-      { pid: 4, name: 'P4', arrival: 3, burst: 6, remaining: 6, priority: 2, memory: 128, state: 'READY' },
-    ];
-
-    // Asignación contigua inicial en RAM (1024 KB total)
-    let curAddr = 0;
-    this.memoryBlocks = [];
-    const colors = { 1: '#3b82f6', 2: '#10b981', 3: '#f59e0b', 4: '#8b5cf6' };
-
-    this.processes.forEach((p) => {
-      this.memoryBlocks.push({
-        start: curAddr,
-        size: p.memory,
-        pid: p.pid,
-        name: p.name,
-        color: colors[p.pid] || '#06b6d4',
-        free: false,
+  async performAction(action) {
+    try {
+      const response = await fetch('/api/v1/simulation', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(action),
       });
-      curAddr += p.memory;
-    });
-
-    // Hueco libre final
-    if (curAddr < this.totalRamKb) {
-      this.memoryBlocks.push({
-        start: curAddr,
-        size: this.totalRamKb - curAddr,
-        pid: null,
-        name: 'LIBRE',
-        color: null,
-        free: true,
-      });
+      const state = await response.json();
+      if (!response.ok) throw new Error(state.error || `HTTP ${response.status}`);
+      this.applyState(state);
+      return true;
+    } catch (error) {
+      const summary = document.getElementById('gantt-summary-txt');
+      if (summary) summary.textContent = `Error de simulación: ${error.message}`;
+      return false;
     }
   }
-
   togglePlay() {
     this.isRunning = !this.isRunning;
     const btn = document.getElementById('btn-sim-play');
@@ -638,104 +656,25 @@ class TaskManager {
     }
   }
 
-  step() {
-    this.currentTick++;
-
-    // Determinar qué proceso está en ejecución en el tick actual según la línea de tiempo
-    let activeSegment = this.timeline.find((seg) => this.currentTick > seg.start && this.currentTick <= seg.end);
-    let activePid = activeSegment ? activeSegment.pid : null;
-
-    // Actualizar procesos
-    let allFinished = true;
-    this.processes.forEach((p) => {
-      if (p.state !== 'TERMINATED') {
-        if (p.arrival > this.currentTick) {
-          p.state = 'WAITING';
-          allFinished = false;
-        } else if (p.pid === activePid) {
-          p.state = 'RUNNING';
-          if (p.remaining > 0) p.remaining--;
-          if (p.remaining === 0) {
-            p.state = 'TERMINATED';
-          } else {
-            allFinished = false;
-          }
-        } else {
-          p.state = 'READY';
-          allFinished = false;
-        }
-      }
-    });
-
-    const tickEl = document.getElementById('sim-tick-count');
-    if (tickEl) tickEl.textContent = this.currentTick;
-
-    const cpuEl = document.getElementById('sim-cpu-status');
-    if (cpuEl) {
-      if (activeSegment) {
-        cpuEl.textContent = `${activeSegment.name} [PID ${activeSegment.pid}]`;
-      } else if (allFinished) {
-        cpuEl.textContent = 'COMPLETADO';
-        if (this.isRunning) this.togglePlay();
-      } else {
-        cpuEl.textContent = 'IDLE';
-      }
+  async step() {
+    if (this.stepPending) return;
+    this.stepPending = true;
+    try {
+      await this.performAction({ action: 'step' });
+    } finally {
+      this.stepPending = false;
     }
-
-    this.render();
   }
 
-  reset() {
+  async reset() {
     if (this.isRunning) this.togglePlay();
-    this.currentTick = 0;
-    const tickEl = document.getElementById('sim-tick-count');
-    if (tickEl) tickEl.textContent = '0';
-    const cpuEl = document.getElementById('sim-cpu-status');
-    if (cpuEl) cpuEl.textContent = 'READY';
-
-    this.initMemoryBlocks();
-    this.render();
+    await this.performAction({ action: 'reset', algorithm: this.currentAlgo });
   }
 
-  /**
-   * Termina un proceso (kill <PID>) y libera su memoria asociada en RAM (T1.5)
-   */
-  killProcess(pid) {
-    const p = this.processes.find((x) => x.pid === pid);
-    if (!p) return;
-
-    p.state = 'TERMINATED';
-    p.remaining = 0;
-
-    // Liberar memoria en el mapa de bloques y fusionar huecos contiguos
-    this.memoryBlocks.forEach((b) => {
-      if (b.pid === pid) {
-        b.free = true;
-        b.pid = null;
-        b.name = 'LIBRE';
-        b.color = null;
-      }
-    });
-
-    this.mergeAdjacentHoles();
-    this.render();
-
-    console.log(`[Task Manager] Proceso ${p.name} (PID ${pid}) terminado. Memoria liberada.`);
+  async killProcess(pid) {
+    if (this.isRunning) this.togglePlay();
+    return this.performAction({ action: 'kill', pid });
   }
-
-  mergeAdjacentHoles() {
-    const merged = [];
-    for (let i = 0; i < this.memoryBlocks.length; i++) {
-      const b = this.memoryBlocks[i];
-      if (merged.length > 0 && merged[merged.length - 1].free && b.free) {
-        merged[merged.length - 1].size += b.size;
-      } else {
-        merged.push({ ...b });
-      }
-    }
-    this.memoryBlocks = merged;
-  }
-
   sortProcesses() {
     this.processes.sort((a, b) => {
       let valA = a[this.sortCol];
@@ -759,6 +698,7 @@ class TaskManager {
     tbody.innerHTML = '';
     this.processes.forEach((p) => {
       const tr = document.createElement('tr');
+      const safeName = String(p.name).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
       let badgeStyle = 'background: rgba(16,185,129,0.2); color: #34d399;';
       if (p.state === 'RUNNING') badgeStyle = 'background: rgba(56,189,248,0.25); color: #38bdf8; font-weight:700;';
       else if (p.state === 'TERMINATED') badgeStyle = 'background: rgba(148,163,184,0.2); color: #94a3b8;';
@@ -766,7 +706,7 @@ class TaskManager {
 
       tr.innerHTML = `
         <td>${p.pid}</td>
-        <td><strong style="color: #38bdf8;">${p.name}</strong></td>
+        <td><strong style="color: #38bdf8;">${safeName}</strong></td>
         <td>${p.arrival} min</td>
         <td>${p.burst} min</td>
         <td><strong style="color: #f1f5f9;">${p.remaining} min</strong></td>
@@ -1223,19 +1163,32 @@ class SyncManager {
 
     if (btnReplace) {
       btnReplace.addEventListener('click', async () => {
+        const box = document.getElementById('replace-result-box');
         try {
-          const res = await fetch('/api/v1/memory/replace');
-          const data = await res.json();
-          const box = document.getElementById('replace-result-box');
-          if (box && data.belady_anomaly) {
-            box.innerHTML = `
-              <div>FIFO (3 marcos): <strong style="color:#f87171;">${data.belady_anomaly.fifo_3_frames_faults} fallos</strong></div>
-              <div>FIFO (4 marcos): <strong style="color:#ef4444;">${data.belady_anomaly.fifo_4_frames_faults} fallos</strong> (¡Belady Confirmado!)</div>
-              <div>Óptimo (3 marcos): <strong style="color:#34d399;">${data.optimal.faults} fallos</strong></div>
-            `;
+          const rawPages = document.getElementById('input-replace-pages').value;
+          const references = rawPages.split(',').map((value) => Number(value.trim()));
+          const frames = Number(document.getElementById('input-replace-frames').value);
+          if (!references.length || references.some((p) => !Number.isInteger(p) || p < 0) || !Number.isInteger(frames) || frames < 1) {
+            throw new Error('Introduce páginas enteras no negativas y al menos un marco.');
           }
+          const res = await fetch('/api/v1/memory/replace', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ references, frames }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          const comparison = ['fifo', 'lru', 'optimal'].map((name) =>
+            `<tr><td>${name.toUpperCase()}</td><td>${data[name].hits}</td><td>${data[name].faults}</td></tr>`).join('');
+          const traces = ['fifo', 'lru', 'optimal'].map((name) => {
+            const rows = data[name].trace.map((step) =>
+              `<tr><td>${step.index}</td><td>${step.page}</td><td>${step.frames.join(', ')}</td><td>${step.hit ? 'Acierto' : 'Fallo'}</td><td>${step.evicted === null ? '—' : step.evicted}</td></tr>`).join('');
+            return `<details><summary>${name.toUpperCase()}: traza por referencia</summary><table class="pm-table"><thead><tr><th>#</th><th>Página</th><th>Marcos</th><th>Resultado</th><th>Víctima</th></tr></thead><tbody>${rows}</tbody></table></details>`;
+          }).join('');
+          const belady = data.belady_anomaly
+            ? `<p>Belady, FIFO: 3 marcos = ${data.belady_anomaly.fifo_3_frames_faults} fallos; 4 marcos = ${data.belady_anomaly.fifo_4_frames_faults} fallos.</p>` : '';
+          if (box) box.innerHTML = `<table class="pm-table"><thead><tr><th>Algoritmo</th><th>Aciertos</th><th>Fallos</th></tr></thead><tbody>${comparison}</tbody></table>${belady}${traces}`;
         } catch (err) {
-          console.warn('Fallo replace:', err);
+          if (box) box.textContent = `Fallo de reemplazo: ${err.message}`;
         }
       });
     }

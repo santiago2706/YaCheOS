@@ -1,6 +1,6 @@
 # Informe técnico Beta — planificación y memoria
 
-**Estado de la evidencia:** los cálculos de QA se contrastaron con los ejecutables C integrados para CPU y memoria. Las trazas C y los gráficos generados a partir de ellas se guardan en este informe. La prueba existente del endpoint web confirma la anomalía de Belady; la exposición de la traza completa de reemplazo en la web sigue pendiente.
+**Estado de la evidencia:** los cálculos de QA se contrastaron con los ejecutables C integrados para CPU y memoria. Las trazas C y los gráficos generados a partir de ellas se guardan en este informe. El endpoint web invoca el script Python de reemplazo y devuelve la traza por referencia; la interfaz muestra la comparación y permite expandir cada traza.
 
 ## 1. Alcance, datos y método
 
@@ -114,15 +114,15 @@ Detalle de FIFO con 3 marcos (cada fila es un acceso; `–` indica marco aún li
 | 10 | 4 | 5, 3, 4 | Fallo | 2 |
 | 11 | 5 | 5, 3, 4 | Acierto | – |
 
-Las entradas para repetirlo están en [`referencias_belady_3marcos.json`](../tests_python/fixtures/referencias_belady_3marcos.json) y [`referencias_belady_4marcos.json`](../tests_python/fixtures/referencias_belady_4marcos.json). `page_replacement.py` acepta esos JSON por `--file` o por `stdin`; emite un objeto con FIFO, LRU y OPTIMAL y sus trazas completas. La prueba Go `TestPageReplacementBeladyAnomaly` del endpoint `/api/v1/memory/replace` pasó y verificó los conteos FIFO de 9 y 10 fallos. El handler web actual calcula los algoritmos en Go y devuelve conteos, pero no recibe un patrón de referencias arbitrario ni expone la traza por acceso del script Python. Esa conexión y visualización corresponden al integrante 1; por ello, no se declara cumplida la integración completa del reemplazo en la web.
+Las entradas para repetirlo están en [`referencias_belady_3marcos.json`](../tests_python/fixtures/referencias_belady_3marcos.json) y [`referencias_belady_4marcos.json`](../tests_python/fixtures/referencias_belady_4marcos.json). `page_replacement.py` acepta esos JSON por `--file` o por `stdin`; emite un objeto con FIFO, LRU y OPTIMAL y sus trazas completas. La prueba Go `TestPageReplacementBeladyAnomaly` verifica los conteos FIFO de 9 y 10 fallos. `TestReplacementUsesPythonTraceForCustomInput` envía un patrón distinto y comprueba la traza completa. El handler web ejecuta Python con entrada JSON; la interfaz permite introducir patrón y marcos, comparar los tres algoritmos y desplegar aciertos, fallos, marcos y víctimas de cada referencia.
 
 ## 5. Estado de validación e integración
 
-| Entregable | Evidencia en esta rama | Pendiente externo |
+| Entregable | Evidencia integrada | Limitación de validación |
 |---|---|---|
-| Gantt exacto y métricas | Trece comparaciones CPU C/oráculo; cuatro trazas C y SVG generados desde ellas; pruebas con tiempo inactivo, envejecimiento y 600 segmentos sin truncamiento | Mostrar los SVG en la interfaz web |
+| Gantt exacto y métricas | Trece comparaciones CPU C/oráculo; cuatro trazas C y SVG generados desde ellas; pruebas con tiempo inactivo, envejecimiento y 600 segmentos sin truncamiento. La web sirve los SVG para el caso base y muestra la línea de tiempo C activa | Tras terminar un PID, la línea de tiempo se recalcula en C; el SVG documentado corresponde al caso base |
 | Paginación y segmentación | Dos ejecutables C comparados con Python: `30480`, `5500` y trap; trazas C conservadas | Ninguno para la auditoría de estos casos |
 | Asignación contigua | Salida C con 6 unidades libres, hueco máximo 2 y alerta, comparada con Python | Ninguno para el caso de fragmentación probado |
-| Reemplazo | FIFO/LRU/Óptimo en Python, tabla, trazas y caso de Belady; prueba Go del conteo FIFO | Conectar el endpoint al script Python y mostrar la traza completa en la web |
+| Reemplazo | FIFO/LRU/Óptimo en Python, tabla, trazas y caso de Belady; endpoint Go que invoca Python con patrón y marcos configurables; comparación y trazas por referencia visibles en web | Ampliar pruebas manuales con otros patrones durante la revisión cruzada |
 
-**Criterio para cerrar la integración Beta:** el endpoint de reemplazo debe aceptar el mismo patrón y número de marcos que el script Python, publicar aciertos, fallos y la traza por referencia, y la interfaz debe mostrar los gráficos de Gantt y la tabla/traza de reemplazo. Después se repiten las pruebas de QA con esas salidas web reales y se actualiza esta tabla.
+**Integración Beta:** el endpoint acepta el mismo patrón y número de marcos que el script Python y publica aciertos, fallos y traza por referencia. La web muestra los SVG de Gantt del caso base y la tabla/traza de reemplazo. Se añadieron pruebas de endpoints y se ejecutó un recorrido en navegador. La demostración real de `fork/exec/waitpid` sigue requiriendo Linux/WSL; la prueba con detector de carreras de Go requiere un compilador compatible de 64 bits en este entorno Windows.

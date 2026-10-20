@@ -21,6 +21,8 @@ import (
 type CoreHandlers struct {
 	baseDir      string
 	mu           sync.RWMutex // Protege el reemplazo de los punteros de simulación
+	taskMu       sync.Mutex
+	task         *taskSimulation
 	philosophers *syncgo.DiningPhilosophers
 	buffer       *syncgo.BoundedBuffer
 }
@@ -323,146 +325,6 @@ func (h *CoreHandlers) HandleMemoryTranslate(w http.ResponseWriter, r *http.Requ
 	result["latency_ms"] = latencyMs
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(result)
-}
-
-// HandlePageReplacement maneja /api/v1/memory/replace (M3 y S3.1: FIFO, LRU, Óptimo y Anomalía de Belady).
-func (h *CoreHandlers) HandlePageReplacement(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	// Patrón de prueba por defecto: [1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5] (Caso Belady de clase)
-	pages := []int{1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5}
-	frames := 3
-
-	if fStr := r.URL.Query().Get("frames"); fStr != "" {
-		if f, err := strconv.Atoi(fStr); err == nil && f > 0 {
-			frames = f
-		}
-	}
-
-	// Algoritmo FIFO
-	simulateFIFO := func(ref []int, numFrames int) (int, int) {
-		faults := 0
-		hits := 0
-		frameList := make([]int, 0, numFrames)
-		for _, p := range ref {
-			found := false
-			for _, inFrame := range frameList {
-				if inFrame == p {
-					found = true
-					break
-				}
-			}
-			if found {
-				hits++
-			} else {
-				faults++
-				if len(frameList) < numFrames {
-					frameList = append(frameList, p)
-				} else {
-					frameList = append(frameList[1:], p)
-				}
-			}
-		}
-		return faults, hits
-	}
-
-	// Algoritmo LRU
-	simulateLRU := func(ref []int, numFrames int) (int, int) {
-		faults := 0
-		hits := 0
-		frameList := make([]int, 0, numFrames)
-		for _, p := range ref {
-			idx := -1
-			for i, inFrame := range frameList {
-				if inFrame == p {
-					idx = i
-					break
-				}
-			}
-			if idx != -1 {
-				hits++
-				// Mover al final (más recientemente usado)
-				item := frameList[idx]
-				frameList = append(append(frameList[:idx], frameList[idx+1:]...), item)
-			} else {
-				faults++
-				if len(frameList) < numFrames {
-					frameList = append(frameList, p)
-				} else {
-					frameList = append(frameList[1:], p)
-				}
-			}
-		}
-		return faults, hits
-	}
-
-	// Algoritmo Óptimo (Belady)
-	simulateOpt := func(ref []int, numFrames int) (int, int) {
-		faults := 0
-		hits := 0
-		frameList := make([]int, 0, numFrames)
-		for i, p := range ref {
-			found := false
-			for _, inFrame := range frameList {
-				if inFrame == p {
-					found = true
-					break
-				}
-			}
-			if found {
-				hits++
-			} else {
-				faults++
-				if len(frameList) < numFrames {
-					frameList = append(frameList, p)
-				} else {
-					// Buscar la página que no se usará por más tiempo en el futuro
-					farthestIdx := -1
-					farthestFuture := -1
-					for fi, framePage := range frameList {
-						nextUse := 1000000
-						for k := i + 1; k < len(ref); k++ {
-							if ref[k] == framePage {
-								nextUse = k
-								break
-							}
-						}
-						if nextUse > farthestFuture {
-							farthestFuture = nextUse
-							farthestIdx = fi
-						}
-					}
-					frameList[farthestIdx] = p
-				}
-			}
-		}
-		return faults, hits
-	}
-
-	fifoFaults, fifoHits := simulateFIFO(pages, frames)
-	lruFaults, lruHits := simulateLRU(pages, frames)
-	optFaults, optHits := simulateOpt(pages, frames)
-
-	// Demostración de anomalía de Belady
-	fifo3, _ := simulateFIFO(pages, 3)
-	fifo4, _ := simulateFIFO(pages, 4)
-
-	res := map[string]any{
-		"references": pages,
-		"frames":     frames,
-		"fifo":       map[string]any{"faults": fifoFaults, "hits": fifoHits},
-		"lru":        map[string]any{"faults": lruFaults, "hits": lruHits},
-		"optimal":    map[string]any{"faults": optFaults, "hits": optHits},
-		"belady_anomaly": map[string]any{
-			"fifo_3_frames_faults": fifo3,
-			"fifo_4_frames_faults": fifo4,
-			"anomaly_confirmed":    fifo4 > fifo3,
-			"note":                 "En FIFO, al aumentar de 3 a 4 marcos los fallos suben de 9 a 10 (Anomalía de Belady).",
-		},
-	}
-
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(res)
 }
 
 // HandleSyncStatus maneja /api/v1/sync/status para consultar el estado del buffer y filósofos.
