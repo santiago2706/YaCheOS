@@ -1,0 +1,41 @@
+name: Beta M1-M3
+
+on:
+  push:
+    branches: [feat/beta-modulos-integrados]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compilar motores C y ejecutar pruebas unitarias
+        run: |
+          make -C src/core_c
+          make -C src/core_c test
+      - name: Revisar memoria de cola y asignador
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+          valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 build/core_test
+      - name: Demostrar fork, exec y waitpid en Linux
+        run: |
+          src/core_c/process_demo > /tmp/yakcheos-process-demo.json
+          python -c 'import json; d=json.load(open("/tmp/yakcheos-process-demo.json")); assert d["exit_status"] == 0 and d["zombie_prevented"] and d["reaped_child_pid"] == d["child_pid"]'
+      - name: Auditar C frente a oráculos Python
+        run: |
+          python -m pip install pytest
+          python -m pytest -q tests_python
+      - name: Probar Go y detectar carreras
+        run: go test -race -count=1 ./...
+      - name: Verificar sintaxis de la web
+        run: |
+          node --check web/js/app.js
+          node --check web/js/terminal.js
