@@ -110,7 +110,8 @@ func TestCPUScheduleCompactProcesses(t *testing.T) {
 	}
 	var result struct {
 		Processes []struct {
-			PID int `json:"pid"`
+			PID      int `json:"pid"`
+			Priority int `json:"priority"`
 		} `json:"processes"`
 		AverageWaitingTime float64 `json:"average_waiting_time"`
 	}
@@ -119,6 +120,9 @@ func TestCPUScheduleCompactProcesses(t *testing.T) {
 	}
 	if len(result.Processes) != 2 || result.Processes[1].PID != 2 || result.AverageWaitingTime != 1.5 {
 		t.Fatalf("compact JSON must schedule both processes: %+v", result)
+	}
+	if result.Processes[0].Priority != 1 || result.Processes[1].Priority != 1 {
+		t.Fatalf("priority omitted by client must default to 1: %+v", result.Processes)
 	}
 }
 

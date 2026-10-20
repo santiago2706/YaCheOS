@@ -136,7 +136,13 @@ int main(int argc, char *argv[]) {
             else if (strcmp(algo, "PRIORITY") == 0) schedule_priority_nonpreemptive(procs, n, &res);
             else if (strcmp(algo, "PRIORITY_PREEMPTIVE") == 0) schedule_priority_preemptive(procs, n, aging, &res);
             else return EXIT_FAILURE;
+            if (res.timeline_failed) {
+                fprintf(stderr, "{\"error\": \"No se pudo reservar memoria para la traza CPU\"}\n");
+                free_schedule_result(&res);
+                return EXIT_FAILURE;
+            }
             print_schedule_json(&res, outpath);
+            free_schedule_result(&res);
             return EXIT_SUCCESS;
         }
     }

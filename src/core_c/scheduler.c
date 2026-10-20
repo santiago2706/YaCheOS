@@ -1,7 +1,36 @@
 #include "pcb.h"
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+TimelineSegment *append_timeline_segment(ScheduleResult *res) {
+    if (res->timeline_failed) return NULL;
+    if (res->segment_count == res->segment_capacity) {
+        const int max_capacity = INT_MAX / (int)sizeof(TimelineSegment);
+        int capacity = res->segment_capacity == 0 ? INITIAL_TIMELINE_CAPACITY :
+            (res->segment_capacity > max_capacity / 2 ? max_capacity : res->segment_capacity * 2);
+        if (capacity <= res->segment_capacity) {
+            res->timeline_failed = true;
+            return NULL;
+        }
+        TimelineSegment *segments = realloc(res->segments, (size_t)capacity * sizeof(*segments));
+        if (!segments) {
+            res->timeline_failed = true;
+            return NULL;
+        }
+        res->segments = segments;
+        res->segment_capacity = capacity;
+    }
+    return &res->segments[res->segment_count++];
+}
+
+void free_schedule_result(ScheduleResult *res) {
+    free(res->segments);
+    res->segments = NULL;
+    res->segment_count = 0;
+    res->segment_capacity = 0;
+}
 
 static void extract_int_field(const char *line, const char *key, int *out_val) {
     const char *pos = strstr(line, key);
@@ -77,9 +106,15 @@ int load_processes_from_json(const char *filepath, Process *out_procs, int max_p
             extract_int_field(line, "\"burst_time\"", &p.burst_time);
             extract_int_field(line, "\"priority\"", &p.priority);
             extract_int_field(line, "\"memory_kb\"", &p.memory_kb);
-            if (p.arrival_time < 0 || p.burst_time <= 0) {
+            if (p.pid <= 0 || p.arrival_time < 0 || p.burst_time <= 0 || p.priority <= 0) {
                 fclose(fp);
                 return -1;
+            }
+            for (int i = 0; i < count; i++) {
+                if (out_procs[i].pid == p.pid) {
+                    fclose(fp);
+                    return -1;
+                }
             }
             p.remaining_time = p.burst_time;
             p.effective_priority = p.priority;
@@ -198,7 +233,13 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    if (result.timeline_failed) {
+        fprintf(stderr, "{\"error\": \"No se pudo reservar memoria para la traza CPU\"}\n");
+        free_schedule_result(&result);
+        return EXIT_FAILURE;
+    }
     print_schedule_json(&result, outpath);
+    free_schedule_result(&result);
     return EXIT_SUCCESS;
 }
 #endif

@@ -6,7 +6,7 @@
 
 #define MAX_NAME_LEN 32
 #define MAX_PROCESSES 128
-#define MAX_TIMELINE_SEGMENTS 512
+#define INITIAL_TIMELINE_CAPACITY 512
 #define PAGE_SIZE_BYTES 4096
 
 typedef enum {
@@ -60,8 +60,10 @@ typedef struct ScheduleResult {
     int aging_interval;
     Process processes[MAX_PROCESSES];
     int process_count;
-    TimelineSegment segments[MAX_TIMELINE_SEGMENTS];
+    TimelineSegment *segments;
     int segment_count;
+    int segment_capacity;
+    bool timeline_failed;
     double avg_waiting_time;
     double avg_turnaround_time;
     double avg_response_time;
@@ -85,6 +87,8 @@ void schedule_priority_preemptive(const Process *input, int n, int aging_interva
 
 /* Utilidades de Planificación */
 int load_processes_from_json(const char *filepath, Process *out_procs, int max_procs);
+TimelineSegment *append_timeline_segment(ScheduleResult *res);
+void free_schedule_result(ScheduleResult *res);
 void print_schedule_json(const ScheduleResult *res, const char *out_filepath);
 
 /* --- Módulo 3: Gestión de Memoria --- */
